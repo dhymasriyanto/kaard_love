@@ -326,29 +326,60 @@ end
 
 local function getHoverCard(state)
     local mx, my = love.mouse.getPosition()
-    -- hands first (only current player's hand)
-    local p = state.players[state.turn]
-    local xLeft, yTop = handOrigin(state.turn, #p.hand)
-    for i=1,#p.hand do
-        local x1 = xLeft + (i-1)*handSpacing
-        if mx>=x1 and mx<=x1+slotW and my>=yTop and my<=yTop+slotH then
-            return p.hand[i]
+    
+    -- During setup phase: both players can hover all cards
+    if state.phase == 'setup' then
+        -- Check all hands (both players)
+        for pIndex=1,2 do
+            local p = state.players[pIndex]
+            local xLeft, yTop = handOrigin(pIndex, #p.hand)
+            for i=1,#p.hand do
+                local x1 = xLeft + (i-1)*handSpacing
+                if mx>=x1 and mx<=x1+slotW and my>=yTop and my<=yTop+slotH then
+                    return p.hand[i]
+                end
+            end
         end
-    end
-    -- fields (revealed cards for all players, face-down cards only for current player)
-    for pIndex=1,2 do
-        local p = state.players[pIndex]
-        local ox, oy = playerOrigin(pIndex)
-        for i=1,3 do
-            local x = ox + (i-1)*(slotW+margin)
-            local y = oy
-            if mx>=x and mx<=x+slotW and my>=y and my<=y+slotH then
-                local c = p.field[i]
-                if c then
-                    -- Show revealed cards for all players
-                    if p.revealed[i] then return c end
-                    -- Show face-down cards only for current player
-                    if not p.revealed[i] and pIndex == state.turn then return c end
+        
+        -- Check all fields (both players)
+        for pIndex=1,2 do
+            local p = state.players[pIndex]
+            local ox, oy = playerOrigin(pIndex)
+            for i=1,3 do
+                local x = ox + (i-1)*(slotW+margin)
+                local y = oy
+                if mx>=x and mx<=x+slotW and my>=y and my<=y+slotH then
+                    local c = p.field[i]
+                    if c then return c end
+                end
+            end
+        end
+    else
+        -- During combat phase: only current player can hover their cards
+        -- hands first (only current player's hand)
+        local p = state.players[state.turn]
+        local xLeft, yTop = handOrigin(state.turn, #p.hand)
+        for i=1,#p.hand do
+            local x1 = xLeft + (i-1)*handSpacing
+            if mx>=x1 and mx<=x1+slotW and my>=yTop and my<=yTop+slotH then
+                return p.hand[i]
+            end
+        end
+        -- fields (revealed cards for all players, face-down cards only for current player)
+        for pIndex=1,2 do
+            local p = state.players[pIndex]
+            local ox, oy = playerOrigin(pIndex)
+            for i=1,3 do
+                local x = ox + (i-1)*(slotW+margin)
+                local y = oy
+                if mx>=x and mx<=x+slotW and my>=y and my<=y+slotH then
+                    local c = p.field[i]
+                    if c then
+                        -- Show revealed cards for all players
+                        if p.revealed[i] then return c end
+                        -- Show face-down cards only for current player
+                        if not p.revealed[i] and pIndex == state.turn then return c end
+                    end
                 end
             end
         end
@@ -365,20 +396,32 @@ function ui.drawHoverTooltip(state)
     -- place just above Player A hand
     local y = screenH - slotH - 24 - h
     x = 12
-    love.graphics.setColor(0,0,0,0.65)
+    love.graphics.setColor(0,0,0,0.75)
     love.graphics.rectangle('fill', x, y, w, h, 8, 8)
     love.graphics.setColor(1,1,1,1)
+    love.graphics.rectangle('line', x, y, w, h, 8, 8)
+    
     local function sanitizeUtf8(s)
         if not s then return '' end
         if love.utf8 and pcall(love.utf8.len, s) then return s end
         s = s:gsub('[^%z\32-\126]', '')
         return s
     end
+    
+    -- Card name (yellow/gold)
     local name = sanitizeUtf8(card.name or 'Unknown')
-    local ability = sanitizeUtf8(card.ability or '')
+    love.graphics.setColor(1, 1, 0.3, 1) -- Bright yellow
     love.graphics.print(name, x+10, y+8)
-    local line2 = (card.element or '?')..'  STR '..tostring(card.strength or card.baseStrength or 0)
-    love.graphics.print(line2, x+10, y+26)
+    
+    -- Element and Strength (cyan)
+    local element = card.element or '?'
+    local strength = tostring(card.strength or card.baseStrength or 0)
+    love.graphics.setColor(0.3, 1, 1, 1) -- Cyan
+    love.graphics.print(element..'  STR '..strength, x+10, y+26)
+    
+    -- Ability description (light gray)
+    local ability = sanitizeUtf8(card.ability or '')
+    love.graphics.setColor(0.9, 0.9, 0.9, 1) -- Light gray
     love.graphics.printf(ability, x+10, y+42, w-20)
 end
 
@@ -885,21 +928,21 @@ function drawCardTooltip(card, w, h)
 	local x = w - tooltipW - 20
 	local y = h - tooltipH - 20
 	
-	love.graphics.setColor(0,0,0,0.9)
+	love.graphics.setColor(0,0,0,0.85)
 	love.graphics.rectangle('fill', x, y, tooltipW, tooltipH, 8, 8)
 	love.graphics.setColor(1,1,1,1)
 	love.graphics.rectangle('line', x, y, tooltipW, tooltipH, 8, 8)
 	
-	-- Card name
-	love.graphics.setColor(1,1,0,1)
+	-- Card name (bright yellow/gold)
+	love.graphics.setColor(1, 1, 0.3, 1) -- Bright yellow
 	love.graphics.printf(card.name, x + 10, y + 10, tooltipW - 20, 'center')
 	
-	-- Element and Strength
-	love.graphics.setColor(1,1,1,1)
+	-- Element and Strength (cyan)
+	love.graphics.setColor(0.3, 1, 1, 1) -- Cyan
 	love.graphics.printf(card.element..' • STR '..card.strength, x + 10, y + 30, tooltipW - 20, 'center')
 	
-	-- Ability description
-	love.graphics.setColor(0.8,0.8,0.8,1)
+	-- Ability description (light gray)
+	love.graphics.setColor(0.9, 0.9, 0.9, 1) -- Light gray
 	love.graphics.printf(card.ability or 'No ability', x + 10, y + 50, tooltipW - 20, 'center')
 end
 
