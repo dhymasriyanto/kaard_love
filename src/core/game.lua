@@ -52,7 +52,7 @@ function game.load()
 	local gameState = getState()
 	gameState.phase = 'loading'
 	gameState.allCards = loader.loadCards('docs/list_card.csv')
-	gameState.flipSound = loader.loadSound('assets/flip.wav')
+	gameState.flipSound = loader.loadSound('assets/sounds/flip.wav')
 	gameState.background = loader.loadBackground()
 	gameState.phase = 'menu'
 	log('Game loaded successfully!')

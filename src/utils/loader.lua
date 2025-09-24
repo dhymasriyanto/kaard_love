@@ -51,17 +51,17 @@ function loader.findImageFor(name, deck)
 	local normalized = name:lower():gsub('[^%w]+','_')
 	-- images provided already match CSV names; try multiple strategies
 	local candidates = {
-		('assets/cards/'..sub..'/'..normalized..'.png'),
-		('assets/cards/'..sub..'/'..name:lower():gsub(' ','_')..'.png'),
-		('assets/cards/'..sub..'/'..name:gsub(' ','_'):lower()..'.png')
+		('assets/images/cards/'..sub..'/'..normalized..'.png'),
+		('assets/images/cards/'..sub..'/'..name:lower():gsub(' ','_')..'.png'),
+		('assets/images/cards/'..sub..'/'..name:gsub(' ','_'):lower()..'.png')
 	}
 	for _, p in ipairs(candidates) do
 		if love.filesystem.getInfo(p) then return p end
 	end
 	-- fallback: first png in the folder
-	if love.filesystem.getInfo('assets/cards/'..sub) then
-		for _, f in ipairs(love.filesystem.getDirectoryItems('assets/cards/'..sub)) do
-			if f:lower():match('%.png$') then return 'assets/cards/'..sub..'/'..f end
+	if love.filesystem.getInfo('assets/images/cards/'..sub) then
+		for _, f in ipairs(love.filesystem.getDirectoryItems('assets/images/cards/'..sub)) do
+			if f:lower():match('%.png$') then return 'assets/images/cards/'..sub..'/'..f end
 		end
 	end
 	return nil
@@ -81,7 +81,7 @@ function loader.loadSound(soundPath)
 end
 
 function loader.loadCardBack()
-	local cardBackPath = 'assets/card_back.png'
+	local cardBackPath = 'assets/images/card_back.png'
 	if love.filesystem.getInfo(cardBackPath) then
 		return love.graphics.newImage(cardBackPath)
 	else
@@ -91,7 +91,7 @@ function loader.loadCardBack()
 end
 
 function loader.loadBackground()
-	local backgroundPath = 'assets/background.png'
+	local backgroundPath = 'assets/images/background.png'
 	if love.filesystem.getInfo(backgroundPath) then
 		return love.graphics.newImage(backgroundPath)
 	else

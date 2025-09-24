@@ -13,7 +13,7 @@ Controls:
 - Press R to restart.
 
 Notes:
-- Card images are auto-mapped from assets/cards/* using CSV names.
+- Card images are auto-mapped from assets/images/cards/* using CSV names.
 - Implemented example abilities: Stitched Hag, Decayed Gas, Oak Guardian, Shieldbearer, Battle Sage, Arcane Bolt, Essential Cocoon, Gluttony Tarantula, Warden of the Grove.
 - Elements: Sword > Orb > Shield > Sword. Ties compare strength.
 
