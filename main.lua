@@ -1,7 +1,7 @@
 -- Kaard: Simple TCG prototype using LÖVE2D
 -- Entry point
 
-local game = require('src.game')
+local game = require('src.core.game')
 
 function love.load()
 	love.window.setTitle('Kaard - Simple TCG')

@@ -6,5 +6,3 @@ function love.conf(t)
 	-- Allow reading real files from project dir
 	t.appendidentity = false
 end
-
-

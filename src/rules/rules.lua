@@ -1,4 +1,4 @@
-local loader = require('src.loader')
+local loader = require('src.utils.loader')
 local rules = {}
 
 local beats = {

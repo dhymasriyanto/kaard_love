@@ -1,4 +1,5 @@
 local loader = {}
+local cards = require('src.data.cards')
 
 local lfs = love.filesystem
 
@@ -31,6 +32,7 @@ function loader.loadCards(csvPath)
 			})
 		end
 	end
+	cards.setAllCards(data)
 	return data
 end
 
@@ -38,9 +40,9 @@ function loader.findImageFor(name, deck)
 	-- map deck folder names to assets/cards subfolders
 	local folderMap = {
 		Undead = 'undead',
-		Spellcaster = 'mage',
+		Spellcaster = 'spellcaster',
 		Druids = 'druids',
-		Knights = 'knight',
+		Knights = 'knights',
 		Mimic = 'mimic',
 		Spider = 'spider',
 	}
@@ -65,41 +67,37 @@ function loader.findImageFor(name, deck)
 	return nil
 end
 
-function loader.buildDecks(cardDefs)
-	-- Build a single combined deck using copy rules
-	local copiesByRarity = { C = 3, R = 3, E = 2, L = 1 }
-	local deck = {}
-	for _, c in ipairs(cardDefs) do
-		local copies = copiesByRarity[c.rarity] or 1
-		for i=1,copies do table.insert(deck, {
-			archetype=c.archetype, name=c.name, element=c.element, strength=c.strength, baseStrength=c.strength,
-			rarity=c.rarity, ability=c.ability, image=c.image, imagePath=c.imagePath,
-		}) end
-	end
-	return deck
-end
 
-function loader.cloneDeck(deck)
-	local d = {}
-	for _, c in ipairs(deck) do
-		local nc = {}
-		for k,v in pairs(c) do nc[k]=v end
-		nc.strength = c.baseStrength
-		table.insert(d, nc)
-	end
-	return d
-end
 
-function loader.shuffle(t)
-	for i = #t, 2, -1 do
-		local j = love.math.random(i)
-		t[i], t[j] = t[j], t[i]
+
+
+function loader.loadSound(soundPath)
+	if love.filesystem.getInfo(soundPath) then
+		return love.audio.newSource(soundPath, 'static')
+	else
+		print('Warning: Sound file not found: ' .. soundPath)
+		return nil
 	end
 end
 
-function loader.draw(player)
-	local card = table.remove(player.deck, 1)
-	if card then table.insert(player.hand, card) end
+function loader.loadCardBack()
+	local cardBackPath = 'assets/card_back.png'
+	if love.filesystem.getInfo(cardBackPath) then
+		return love.graphics.newImage(cardBackPath)
+	else
+		print('Warning: Card back image not found: ' .. cardBackPath)
+		return nil
+	end
+end
+
+function loader.loadBackground()
+	local backgroundPath = 'assets/background.png'
+	if love.filesystem.getInfo(backgroundPath) then
+		return love.graphics.newImage(backgroundPath)
+	else
+		print('Warning: Background image not found: ' .. backgroundPath)
+		return nil
+	end
 end
 
 return loader
