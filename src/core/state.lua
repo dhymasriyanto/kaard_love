@@ -30,6 +30,7 @@ local gameState = {
 	networkPlayerId = 1, -- 1 for host, 2 for client
 	opponentDeckReady = false,
 	deckSelectionComplete = {false, false}, -- Track if each player has selected their deck
+	deckConfirmed = {false, false}, -- Track if each player has confirmed their deck
 	waitingForOpponent = false,
 	opponentCards = {}, -- Store opponent's cards (unrevealed)
 	network = nil -- Will be set to network module
@@ -73,6 +74,7 @@ function state.reset()
 		networkPlayerId = 1,
 		opponentDeckReady = false,
 		deckSelectionComplete = {false, false},
+		deckConfirmed = {false, false},
 		waitingForOpponent = false,
 		opponentCards = {},
 		network = gameState.network -- Preserve network module reference

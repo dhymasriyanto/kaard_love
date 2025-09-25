@@ -3,6 +3,19 @@ local socket = require('socket')
 
 local network = {}
 
+-- Message types for multiplayer communication
+network.MESSAGE_TYPES = {
+    PLAYER_READY = "PLAYER_READY",
+    PLAYER_DECK_SELECTED = "PLAYER_DECK_SELECTED",
+    GAME_START = "GAME_START",
+    CARD_PLACED = "CARD_PLACED",
+    CARD_REVEALED = "CARD_REVEALED",
+    SETUP_PASSED = "SETUP_PASSED",
+    TURN_CHANGED = "TURN_CHANGED",
+    GAME_STATE_SYNC = "GAME_STATE_SYNC",
+    COIN_TOSS_RESULT = "COIN_TOSS_RESULT"
+}
+
 -- Network state
 local state = {
     server = nil,
@@ -245,6 +258,141 @@ function network.disconnect()
     state.messages = {}
     state.onClientConnected = nil
     print("Network: Disconnected")
+end
+
+-- Simple message encoding (avoiding JSON dependency)
+local function encodeMessage(messageType, data)
+    local parts = {"MSG", messageType}
+    if data then
+        for k, v in pairs(data) do
+            if type(v) == "table" then
+                -- Simple table encoding for deck data
+                local deckStr = ""
+                for i, cardData in ipairs(v) do
+                    if i > 1 then deckStr = deckStr .. "|" end
+                    deckStr = deckStr .. cardData.card.name .. ":" .. cardData.count
+                end
+                table.insert(parts, k .. "=" .. deckStr)
+            else
+                table.insert(parts, k .. "=" .. tostring(v))
+            end
+        end
+    end
+    return table.concat(parts, ";")
+end
+
+-- Send structured message
+function network.sendStructuredMessage(messageType, data)
+    local message = encodeMessage(messageType, data)
+    print('Sending structured message: ' .. message)
+    return network.sendMessage(message)
+end
+
+-- Send deck selected message
+function network.sendDeckSelected(deckData)
+    print('📤 Sending PLAYER_DECK_SELECTED message with ' .. #deckData .. ' cards')
+    return network.sendStructuredMessage(network.MESSAGE_TYPES.PLAYER_DECK_SELECTED, {
+        deck = deckData
+    })
+end
+
+-- Send card placed message
+function network.sendCardPlaced(playerId, slotIndex, card)
+    return network.sendStructuredMessage(network.MESSAGE_TYPES.CARD_PLACED, {
+        playerId = playerId,
+        slotIndex = slotIndex,
+        card = card
+    })
+end
+
+-- Send card revealed message
+function network.sendCardRevealed(playerId, slotIndex)
+    return network.sendStructuredMessage(network.MESSAGE_TYPES.CARD_REVEALED, {
+        playerId = playerId,
+        slotIndex = slotIndex
+    })
+end
+
+-- Send setup passed message
+function network.sendSetupPassed(playerId)
+    return network.sendStructuredMessage(network.MESSAGE_TYPES.SETUP_PASSED, {
+        playerId = playerId
+    })
+end
+
+-- Send turn changed message
+function network.sendTurnChanged(turn)
+    return network.sendStructuredMessage(network.MESSAGE_TYPES.TURN_CHANGED, {
+        turn = turn
+    })
+end
+
+-- Send coin toss result
+function network.sendCoinTossResult(result)
+    return network.sendStructuredMessage(network.MESSAGE_TYPES.COIN_TOSS_RESULT, {
+        result = result
+    })
+end
+
+-- Get player ID (1 for host, 2 for client)
+function network.getPlayerId()
+    return state.mode == 'host' and 1 or 2
+end
+
+-- Check if multiplayer
+function network.isMultiplayer()
+    return state.mode ~= 'none'
+end
+
+-- Decode received message
+function network.decodeMessage(messageStr)
+    if not messageStr:match("^MSG") then
+        return nil
+    end
+    
+    print("Decoding message: " .. messageStr)
+    
+    local parts = {}
+    for part in messageStr:gmatch("[^;]+") do
+        table.insert(parts, part)
+    end
+    
+    if #parts < 2 then return nil end
+    
+    local messageType = parts[2]
+    local data = {}
+    
+    for i = 3, #parts do
+        local key, value = parts[i]:match("([^=]+)=(.*)")
+        if key and value then
+            if key == "deck" then
+                -- Decode deck data
+                data[key] = {}
+                for cardStr in value:gmatch("[^|]+") do
+                    local cardName, count = cardStr:match("([^:]+):(%d+)")
+                    if cardName and count then
+                        -- Find the card in allCards
+                        local gameState = require('src.core.state').get()
+                        for _, card in ipairs(gameState.allCards or {}) do
+                            if card.name == cardName then
+                                table.insert(data[key], {card = card, count = tonumber(count)})
+                                break
+                            end
+                        end
+                    end
+                end
+            else
+                data[key] = value
+            end
+        end
+    end
+    
+    print("Decoded message type: " .. messageType)
+    
+    return {
+        type = messageType,
+        data = data
+    }
 end
 
 return network

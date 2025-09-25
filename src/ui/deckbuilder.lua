@@ -733,23 +733,31 @@ function deckbuilder.confirmDeckSelection(state)
 		return false
 	end
 	
-	-- Mark deck as selected
-	state.deckSelectionComplete[currentPlayerId] = true
-	
 	-- Send deck to opponent
 	state.network.sendDeckSelected(currentDeck)
+	print('📤 Deck sent to opponent')
+	
+	-- Mark current player as confirmed
+	state.deckConfirmed[currentPlayerId] = true
+	print('✅ Player ' .. currentPlayerId .. ' deck confirmed')
+	print('🔍 DEBUG: deckConfirmed[1]=' .. tostring(state.deckConfirmed[1]) .. ', deckConfirmed[2]=' .. tostring(state.deckConfirmed[2]))
 	
 	-- Check if both players are ready
-	if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
-		-- Both players ready, start game
-		state.phase = 'setup'
+	if state.deckConfirmed[1] and state.deckConfirmed[2] then
+		-- Both players ready, start game immediately
 		state.waitingForOpponent = false
+		print('🎮 BOTH PLAYERS CONFIRMED! Starting game immediately...')
+		
+		-- Start the game immediately
+		local game = require('src.core.game')
+		game.startGame()
 		return true
 	else
 		-- Wait for opponent
 		state.waitingForOpponent = true
 		state.notification.text = 'Deck confirmed! Waiting for opponent...'
 		state.notification.timer = 2.0
+		print('⏳ Player ' .. currentPlayerId .. ' waiting for opponent confirmation...')
 		return false
 	end
 end
@@ -762,16 +770,31 @@ function deckbuilder.handleOpponentDeck(state, deckData)
 	
 	local opponentId = state.networkPlayerId == 1 and 2 or 1
 	state.playerDecks[opponentId] = deckData
-	state.deckSelectionComplete[opponentId] = true
-	state.opponentDeckReady = true
 	
-	-- Check if both players are ready
-	if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
-		-- Both players ready, start game
-		state.phase = 'setup'
-		state.waitingForOpponent = false
-		state.notification.text = 'Both players ready! Starting game...'
-		state.notification.timer = 2.0
+	print('📨 Opponent deck received. Player ' .. opponentId .. ' deck stored.')
+	
+	-- Note: deckConfirmed flag is now handled in game.handleNetworkMessage()
+	-- This function just stores the deck data
+end
+
+-- Update function for deckbuilder (similar to lobby)
+function deckbuilder.update(dt, state)
+	-- Update notification timer
+	if state.notification.timer > 0 then
+		state.notification.timer = state.notification.timer - dt
+		if state.notification.timer <= 0 then
+			state.notification.text = ''
+		end
+	end
+	
+	-- Backup check using deckConfirmed flag
+	if state.multiplayer and state.waitingForOpponent then
+		if state.deckConfirmed[1] and state.deckConfirmed[2] then
+			print('🎮 BOTH PLAYERS CONFIRMED! Auto-starting game from deckbuilder.update...')
+			state.waitingForOpponent = false
+			local game = require('src.core.game')
+			game.startGame()
+		end
 	end
 end
 

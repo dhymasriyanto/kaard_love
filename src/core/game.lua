@@ -53,6 +53,10 @@ function game.load()
 	gameState.flipSound = loader.loadSound('assets/sounds/flip.wav')
 	gameState.background = loader.loadBackground()
 	
+	-- Initialize network module
+	local network = require('src.core.network')
+	gameState.network = network
+	
 	-- Initialize lobby
 	lobby.init()
 	
@@ -66,6 +70,26 @@ function game.update(dt)
 	-- Update lobby
 	if gameState.phase == 'lobby' then
 		lobby.update(dt)
+	end
+	
+	-- Update deckbuilder
+	if gameState.phase == 'deckbuilder' then
+		deckbuilder.update(dt, gameState)
+	end
+	
+	-- Process network messages in multiplayer mode
+	if gameState.multiplayer and gameState.network then
+		local messages = gameState.network.getMessages()
+		if #messages > 0 then
+			print('Processing ' .. #messages .. ' network messages')
+		end
+		for _, message in ipairs(messages) do
+			local decodedMessage = gameState.network.decodeMessage(message)
+			if decodedMessage then
+				print('Handling network message: ' .. decodedMessage.type)
+				game.handleNetworkMessage(decodedMessage, gameState)
+			end
+		end
 	end
 	
 	-- Delegate animation updates to animations module
@@ -139,11 +163,15 @@ end
 -- Game start function
 function game.startGame()
 	local gameState = getState()
+	log('Game.startGame() called - Phase: ' .. gameState.phase)
+	print('🚀 GAME.STARTGAME() CALLED! Phase: ' .. gameState.phase)
+	print('🚀 DEBUG: Multiplayer=' .. tostring(gameState.multiplayer))
+	print('🚀 DEBUG: NetworkPlayerId=' .. tostring(gameState.networkPlayerId))
 	
 	-- Initialize players
-	if gameState.multiplayer and gameState.multiplayer.isMultiplayer() then
+	if gameState.multiplayer and gameState.network and gameState.network.isMultiplayer() then
 		-- In multiplayer, use multiplayer player IDs
-		local myPlayerId = gameState.multiplayer.getMyPlayerId()
+		local myPlayerId = gameState.network.getPlayerId()
 		local hostName = myPlayerId == 1 and 'Host' or 'Client'
 		local clientName = myPlayerId == 1 and 'Client' or 'Host'
 		gameState.players = {
@@ -175,10 +203,14 @@ function game.startGame()
 	gameState.currentRound = 1
 	gameState.setupPassed = {false, false}
 	gameState.coinFirst = 1
+	gameState.deckConfirmed = {false, false}  -- Track deck confirmation for multiplayer
 	gameState.phase = 'setup'  -- Set phase to setup
 	
 	log('Game start. Draw 5 cards each. Setup phase.')
 	log('Both players place cards simultaneously, then coin toss determines first player.')
+	
+	print('🚀 PHASE CHANGED TO: ' .. gameState.phase)
+	print('🚀 DEBUG: Phase transition should show now')
 	
 	-- Show round start transition
 	showPhaseTransition('ROUND '..gameState.currentRound, 2.0)
@@ -191,7 +223,20 @@ function game.handleNetworkMessage(message, gameState)
 		local lobby = require('src.ui.lobby')
 		lobby.handleNetworkMessage(message, gameState)
 	elseif message.type == network.MESSAGE_TYPES.PLAYER_DECK_SELECTED then
+		print('📨 Received PLAYER_DECK_SELECTED message, calling handleOpponentDeck...')
 		deckbuilder.handleOpponentDeck(gameState, message.data.deck)
+		
+		-- Mark opponent as confirmed
+		local opponentId = (gameState.networkPlayerId == 1) and 2 or 1
+		gameState.deckConfirmed[opponentId] = true
+		print('✅ Opponent ' .. opponentId .. ' deck confirmed')
+		print('🔍 DEBUG: deckConfirmed[1]=' .. tostring(gameState.deckConfirmed[1]) .. ', deckConfirmed[2]=' .. tostring(gameState.deckConfirmed[2]))
+		
+		-- Check if both players are ready
+		if gameState.deckConfirmed[1] and gameState.deckConfirmed[2] then
+			print('🎮 BOTH PLAYERS CONFIRMED! Starting game from network message...')
+			game.startGame()
+		end
 	elseif message.type == network.MESSAGE_TYPES.GAME_START then
 		-- Host started the game, transition to deck builder
 		gameState.phase = 'deckbuilder'
@@ -276,12 +321,6 @@ function game.keypressed(key)
 		if lobby.handleKeyInput(key) then
 			return
 		end
-	end
-	
-	-- Handle deck builder Enter key in multiplayer
-	if gameState.phase == 'deckbuilder' and gameState.multiplayer and key == 'return' then
-		deckbuilder.confirmDeckSelection(gameState)
-		return
 	end
 	
 	events.keypressed(key)

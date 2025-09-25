@@ -71,13 +71,24 @@ function menus.drawPassButton(state)
 	-- Player A pass button (bottom, below center)
 	local btnAY = centerY + 10
 	
+	-- Determine which player is which in multiplayer
+	local playerAName = 'Player A'
+	local playerBName = 'Player B'
+	if state.multiplayer then
+		playerAName = state.networkPlayerId == 1 and 'Host' or 'Client'
+		playerBName = state.networkPlayerId == 1 and 'Client' or 'Host'
+	end
+	
 	-- Draw Player B pass button (top)
 	if not state.setupPassed[2] then
-		love.graphics.setColor(0,0,0,0.45)
+		-- Check if this is the current player's button in multiplayer
+		local isCurrentPlayer = not state.multiplayer or state.networkPlayerId == 2
+		local buttonColor = isCurrentPlayer and {0,0,0,0.45} or {0.3,0.3,0.3,0.2}
+		love.graphics.setColor(buttonColor)
 		love.graphics.rectangle('fill', btnX, btnBY, btnW, btnH, 8, 8)
 		love.graphics.setColor(1,1,1,1)
 		love.graphics.rectangle('line', btnX, btnBY, btnW, btnH, 8, 8)
-		love.graphics.printf('PLAYER B PASS', btnX, btnBY + 12, btnW, 'center')
+		love.graphics.printf(playerBName .. ' PASS', btnX, btnBY + 12, btnW, 'center')
 	else
 		love.graphics.setColor(0.2,0.8,0.2,0.8)
 		love.graphics.rectangle('fill', btnX, btnBY, btnW, btnH, 8, 8)
@@ -87,11 +98,14 @@ function menus.drawPassButton(state)
 	
 	-- Draw Player A pass button (bottom)
 	if not state.setupPassed[1] then
-		love.graphics.setColor(0,0,0,0.45)
+		-- Check if this is the current player's button in multiplayer
+		local isCurrentPlayer = not state.multiplayer or state.networkPlayerId == 1
+		local buttonColor = isCurrentPlayer and {0,0,0,0.45} or {0.3,0.3,0.3,0.2}
+		love.graphics.setColor(buttonColor)
 		love.graphics.rectangle('fill', btnX, btnAY, btnW, btnH, 8, 8)
 		love.graphics.setColor(1,1,1,1)
 		love.graphics.rectangle('line', btnX, btnAY, btnW, btnH, 8, 8)
-		love.graphics.printf('PLAYER A PASS', btnX, btnAY + 12, btnW, 'center')
+		love.graphics.printf(playerAName .. ' PASS', btnX, btnAY + 12, btnW, 'center')
 	else
 		love.graphics.setColor(0.2,0.8,0.2,0.8)
 		love.graphics.rectangle('fill', btnX, btnAY, btnW, btnH, 8, 8)

@@ -251,23 +251,30 @@ function events.keypressed(key)
 		if key == 'escape' then
 			gameState.phase = 'menu'
 		elseif key == 'return' then
-			-- Check both deck sizes and start game
-			local p1Cards = 0
-			for _, cardData in ipairs(gameState.playerDecks[1]) do
-				p1Cards = p1Cards + cardData.count
-			end
-			local p2Cards = 0
-			for _, cardData in ipairs(gameState.playerDecks[2]) do
-				p2Cards = p2Cards + cardData.count
-			end
-			log('Deck sizes: Player 1='..p1Cards..', Player 2='..p2Cards)
-			log('Required: MIN='..config.GAME.MIN_DECK_SIZE..', MAX='..config.GAME.MAX_DECK_SIZE)
-			if p1Cards >= config.GAME.MIN_DECK_SIZE and p1Cards <= config.GAME.MAX_DECK_SIZE and 
-			   p2Cards >= config.GAME.MIN_DECK_SIZE and p2Cards <= config.GAME.MAX_DECK_SIZE then
-				log('Starting game...')
-				require('src.core.game').startGame()
+			-- Handle multiplayer vs single player differently
+			if gameState.multiplayer then
+				-- Multiplayer: use deckbuilder.confirmDeckSelection
+				local deckbuilder = require('src.ui.deckbuilder')
+				deckbuilder.confirmDeckSelection(gameState)
 			else
-				log('Deck sizes invalid! Cannot start game.')
+				-- Single player: check both deck sizes and start game
+				local p1Cards = 0
+				for _, cardData in ipairs(gameState.playerDecks[1]) do
+					p1Cards = p1Cards + cardData.count
+				end
+				local p2Cards = 0
+				for _, cardData in ipairs(gameState.playerDecks[2]) do
+					p2Cards = p2Cards + cardData.count
+				end
+				log('Deck sizes: Player 1='..p1Cards..', Player 2='..p2Cards)
+				log('Required: MIN='..config.GAME.MIN_DECK_SIZE..', MAX='..config.GAME.MAX_DECK_SIZE)
+				if p1Cards >= config.GAME.MIN_DECK_SIZE and p1Cards <= config.GAME.MAX_DECK_SIZE and 
+				   p2Cards >= config.GAME.MIN_DECK_SIZE and p2Cards <= config.GAME.MAX_DECK_SIZE then
+					log('Starting game...')
+					require('src.core.game').startGame()
+				else
+					log('Deck sizes invalid! Cannot start game.')
+				end
 			end
 		end
 	elseif gameState.phase == 'setup' and key == 'tab' then

@@ -83,6 +83,8 @@ function animations.update(dt)
 			end
 		end
 	end
+	
+	-- Game start timer removed - now using immediate transition
 end
 
 return animations

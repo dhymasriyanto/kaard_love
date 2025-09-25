@@ -439,6 +439,15 @@ function lobby.handleMessage(message)
         gameState.phase = 'deckbuilder'
         gameState.multiplayer = true
         gameState.networkPlayerId = 2
+    else
+        -- Handle structured messages
+        local decodedMessage = network.decodeMessage(message)
+        if decodedMessage then
+            print('Lobby handling structured message: ' .. decodedMessage.type)
+            local gameState = require('src.core.state').get()
+            local game = require('src.core.game')
+            game.handleNetworkMessage(decodedMessage, gameState)
+        end
     end
 end
 
