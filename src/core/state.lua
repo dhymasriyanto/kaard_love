@@ -24,7 +24,8 @@ local gameState = {
 	deckBuilderScroll = 0,
 	notification = { text = '', timer = 0 },
 	flipSound = nil,
-	background = nil
+	background = nil,
+	multiplayer = { isMultiplayer = false }
 }
 
 function state.get()
@@ -59,7 +60,8 @@ function state.reset()
 		deckBuilderScroll = 0,
 		notification = { text = '', timer = 0 },
 		flipSound = nil,
-		background = nil
+		background = nil,
+		multiplayer = { isMultiplayer = false }
 	}
 end
 

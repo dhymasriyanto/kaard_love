@@ -19,9 +19,18 @@ end
 
 function deck.createFromDeckData(deckData)
 	local deck = {}
+	
+	-- Safety check: ensure deckData is a table
+	if not deckData or type(deckData) ~= "table" then
+		print("Warning: deckData is not a table, creating empty deck")
+		return deck
+	end
+	
 	for _, cardData in ipairs(deckData) do
-		for i = 1, cardData.count do
-			table.insert(deck, cardData.card)
+		if cardData and cardData.count and cardData.card then
+			for i = 1, cardData.count do
+				table.insert(deck, cardData.card)
+			end
 		end
 	end
 	return deck

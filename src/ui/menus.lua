@@ -1,25 +1,399 @@
 local menus = {}
 
 -- Menu UI
-local menuBtn = { x = 0, y = 0, w = 200, h = 60 }
+local menuButtons = {
+	{ x = 0, y = 0, w = 200, h = 60, text = 'Build Deck', type = 'deckbuilder' },
+	{ x = 0, y = 0, w = 200, h = 60, text = 'Host Game', type = 'host' },
+	{ x = 0, y = 0, w = 200, h = 60, text = 'Join Game', type = 'join' }
+}
+
+-- Multiplayer input state
+local multiplayerInput = {
+	hostInput = { text = 'localhost', active = false },
+	portInput = { text = '12345', active = false },
+	showInput = false,
+	inputType = 'host' -- 'host' or 'join'
+}
 
 function menus.drawMenu(state)
 	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
-	menuBtn.x = (w - menuBtn.w) * 0.5
-	menuBtn.y = (h - menuBtn.h) * 0.5
 	
-	love.graphics.setColor(0,0,0,0.7)
-	love.graphics.rectangle('fill', menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8, 8)
+	-- Title
 	love.graphics.setColor(1,1,1,1)
-	love.graphics.rectangle('line', menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8, 8)
-	love.graphics.printf('Build Deck', menuBtn.x, menuBtn.y + 20, menuBtn.w, 'center')
+	love.graphics.printf('Kaard - Simple TCG', w*0.5 - 200, h*0.2, 400, 'center')
 	
-	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Kaard - Simple TCG', w*0.5 - 200, h*0.3, 400, 'center')
+	-- Check if in lobby
+	local multiplayer = require('src.core.multiplayer')
+	if multiplayer.isInLobby() then
+		menus.drawLobby()
+		return
+	end
+	
+	-- Position buttons vertically
+	local buttonSpacing = 80
+	local startY = h*0.4
+	local centerX = (w - menuButtons[1].w) * 0.5
+	
+	for i, btn in ipairs(menuButtons) do
+		btn.x = centerX
+		btn.y = startY + (i-1) * buttonSpacing
+		
+		-- Button background
+		love.graphics.setColor(0,0,0,0.7)
+		love.graphics.rectangle('fill', btn.x, btn.y, btn.w, btn.h, 8, 8)
+		love.graphics.setColor(1,1,1,1)
+		love.graphics.rectangle('line', btn.x, btn.y, btn.w, btn.h, 8, 8)
+		
+		-- Button text
+		love.graphics.printf(btn.text, btn.x, btn.y + 20, btn.w, 'center')
+	end
+	
+	-- Draw multiplayer input if active
+	if multiplayerInput.showInput then
+		menus.drawMultiplayerInput()
+	end
+end
+
+function menus.drawMultiplayerInput()
+	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+	local inputW, inputH = 400, 200
+	local x = (w - inputW) * 0.5
+	local y = (h - inputH) * 0.5
+	
+	-- Background
+	love.graphics.setColor(0, 0, 0, 0.8)
+	love.graphics.rectangle('fill', x, y, inputW, inputH, 8, 8)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', x, y, inputW, inputH, 8, 8)
+	
+	-- Title
+	local title = multiplayerInput.inputType == 'host' and 'Host Game' or 'Join Game'
+	love.graphics.printf(title, x + 20, y + 20, inputW - 40, 'center')
+	
+	-- Host input
+	love.graphics.printf('Host:', x + 20, y + 60, 100, 'left')
+	local hostX = x + 120
+	local hostY = y + 55
+	local hostW = 200
+	local hostH = 25
+	
+	love.graphics.setColor(0.2, 0.2, 0.2, 1)
+	love.graphics.rectangle('fill', hostX, hostY, hostW, hostH)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', hostX, hostY, hostW, hostH)
+	
+	if multiplayerInput.hostInput.active then
+		love.graphics.setColor(0, 0, 1, 1)
+		love.graphics.rectangle('line', hostX, hostY, hostW, hostH)
+	end
+	
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf(multiplayerInput.hostInput.text, hostX + 5, hostY + 5, hostW - 10, 'left')
+	
+	-- Port input
+	love.graphics.printf('Port:', x + 20, y + 100, 100, 'left')
+	local portX = x + 120
+	local portY = y + 95
+	local portW = 200
+	local portH = 25
+	
+	love.graphics.setColor(0.2, 0.2, 0.2, 1)
+	love.graphics.rectangle('fill', portX, portY, portW, portH)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', portX, portY, portW, portH)
+	
+	if multiplayerInput.portInput.active then
+		love.graphics.setColor(0, 0, 1, 1)
+		love.graphics.rectangle('line', portX, portY, portW, portH)
+	end
+	
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf(multiplayerInput.portInput.text, portX + 5, portY + 5, portW - 10, 'left')
+	
+	-- Buttons
+	local btnW, btnH = 80, 30
+	local btnSpacing = 20
+	
+	-- Connect button
+	local connectX = x + (inputW - btnW*2 - btnSpacing) * 0.5
+	local connectY = y + 140
+	
+	love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
+	love.graphics.rectangle('fill', connectX, connectY, btnW, btnH, 4, 4)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', connectX, connectY, btnW, btnH, 4, 4)
+	love.graphics.printf('Connect', connectX, connectY + 8, btnW, 'center')
+	
+	-- Cancel button
+	local cancelX = connectX + btnW + btnSpacing
+	
+	love.graphics.setColor(0.8, 0.2, 0.2, 0.8)
+	love.graphics.rectangle('fill', cancelX, connectY, btnW, btnH, 4, 4)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', cancelX, connectY, btnW, btnH, 4, 4)
+	love.graphics.printf('Cancel', cancelX, connectY + 8, btnW, 'center')
+	
+	-- Store button positions for click detection
+	multiplayerInput.connectButton = {x = connectX, y = connectY, w = btnW, h = btnH}
+	multiplayerInput.cancelButton = {x = cancelX, y = connectY, w = btnW, h = btnH}
+	multiplayerInput.hostInputBox = {x = hostX, y = hostY, w = hostW, h = hostH}
+	multiplayerInput.portInputBox = {x = portX, y = portY, w = portW, h = portH}
 end
 
 function menus.hitMenuButton(x, y)
-	return x>=menuBtn.x and x<=menuBtn.x+menuBtn.w and y>=menuBtn.y and y<=menuBtn.y+menuBtn.h
+	for _, btn in ipairs(menuButtons) do
+		if x >= btn.x and x <= btn.x + btn.w and y >= btn.y and y <= btn.y + btn.h then
+			return btn.type
+		end
+	end
+	return nil
+end
+
+function menus.hitMultiplayerInput(x, y)
+	if not multiplayerInput.showInput then return nil end
+	
+	-- Check input boxes
+	if multiplayerInput.hostInputBox and 
+	   x >= multiplayerInput.hostInputBox.x and x <= multiplayerInput.hostInputBox.x + multiplayerInput.hostInputBox.w and
+	   y >= multiplayerInput.hostInputBox.y and y <= multiplayerInput.hostInputBox.y + multiplayerInput.hostInputBox.h then
+		return 'host_input'
+	end
+	
+	if multiplayerInput.portInputBox and 
+	   x >= multiplayerInput.portInputBox.x and x <= multiplayerInput.portInputBox.x + multiplayerInput.portInputBox.w and
+	   y >= multiplayerInput.portInputBox.y and y <= multiplayerInput.portInputBox.y + multiplayerInput.portInputBox.h then
+		return 'port_input'
+	end
+	
+	-- Check buttons
+	if multiplayerInput.connectButton and 
+	   x >= multiplayerInput.connectButton.x and x <= multiplayerInput.connectButton.x + multiplayerInput.connectButton.w and
+	   y >= multiplayerInput.connectButton.y and y <= multiplayerInput.connectButton.y + multiplayerInput.connectButton.h then
+		return 'connect'
+	end
+	
+	if multiplayerInput.cancelButton and 
+	   x >= multiplayerInput.cancelButton.x and x <= multiplayerInput.cancelButton.x + multiplayerInput.cancelButton.w and
+	   y >= multiplayerInput.cancelButton.y and y <= multiplayerInput.cancelButton.y + multiplayerInput.cancelButton.h then
+		return 'cancel'
+	end
+	
+	return nil
+end
+
+function menus.showMultiplayerInput(inputType)
+	multiplayerInput.showInput = true
+	multiplayerInput.inputType = inputType
+	multiplayerInput.hostInput.active = false
+	multiplayerInput.portInput.active = false
+end
+
+function menus.hideMultiplayerInput()
+	multiplayerInput.showInput = false
+	multiplayerInput.hostInput.active = false
+	multiplayerInput.portInput.active = false
+end
+
+function menus.getMultiplayerInput()
+	return multiplayerInput
+end
+
+function menus.setActiveInput(inputType)
+	multiplayerInput.hostInput.active = (inputType == 'host_input')
+	multiplayerInput.portInput.active = (inputType == 'port_input')
+end
+
+function menus.addToActiveInput(char)
+	if multiplayerInput.hostInput.active then
+		if char == '\b' then
+			multiplayerInput.hostInput.text = string.sub(multiplayerInput.hostInput.text, 1, -2)
+		else
+			multiplayerInput.hostInput.text = multiplayerInput.hostInput.text .. char
+		end
+	elseif multiplayerInput.portInput.active then
+		if char == '\b' then
+			multiplayerInput.portInput.text = string.sub(multiplayerInput.portInput.text, 1, -2)
+		elseif string.match(char, '%d') then -- Only allow digits
+			multiplayerInput.portInput.text = multiplayerInput.portInput.text .. char
+		end
+	end
+end
+
+function menus.drawLobby()
+	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+	local multiplayer = require('src.core.multiplayer')
+	
+	local lobbyW, lobbyH = 500, 300
+	local x = (w - lobbyW) * 0.5
+	local y = (h - lobbyH) * 0.5
+	
+	-- Background
+	love.graphics.setColor(0, 0, 0, 0.8)
+	love.graphics.rectangle('fill', x, y, lobbyW, lobbyH, 8, 8)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', x, y, lobbyW, lobbyH, 8, 8)
+	
+	-- Title
+	local title = multiplayer.getMode() == 'host' and 'Hosting Game' or 'Joining Game'
+	love.graphics.printf(title, x + 20, y + 20, lobbyW - 40, 'center')
+	
+	-- Connection info
+	local status = multiplayer.getConnectionStatus()
+	local statusColor = {1, 1, 1, 1}
+	if status == 'connected' then
+		statusColor = {0.2, 1, 0.2, 1}
+	elseif status == 'connecting' then
+		statusColor = {1, 1, 0.2, 1}
+	elseif status == 'error' then
+		statusColor = {1, 0.2, 0.2, 1}
+	end
+	
+	love.graphics.setColor(statusColor)
+	love.graphics.printf('Status: ' .. status, x + 20, y + 60, lobbyW - 40, 'center')
+	
+	-- Debug: show multiplayer mode
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf('Mode: ' .. multiplayer.getMode(), x + 20, y + 80, lobbyW - 40, 'center')
+	
+	-- Player info
+	local playerNames = multiplayer.getPlayerNames()
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf('Players:', x + 20, y + 100, lobbyW - 40, 'left')
+	
+	-- Player 1
+	local p1Color = {0.8, 0.8, 0.8, 1}
+	if multiplayer.getMyPlayerId() == 1 then
+		p1Color = {0.2, 0.8, 0.2, 1}
+	end
+	love.graphics.setColor(p1Color)
+	love.graphics.printf('• ' .. playerNames[1], x + 40, y + 120, lobbyW - 60, 'left')
+	
+	-- Player 2
+	local p2Color = {0.8, 0.8, 0.8, 1}
+	if multiplayer.getMyPlayerId() == 2 then
+		p2Color = {0.2, 0.8, 0.2, 1}
+	end
+	love.graphics.setColor(p2Color)
+	love.graphics.printf('• ' .. playerNames[2], x + 40, y + 140, lobbyW - 60, 'left')
+	
+	-- Ready status
+	local lobbyPhase = multiplayer.getLobbyPhase()
+	-- Debug: show lobby phase
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf('Lobby Phase: ' .. lobbyPhase, x + 20, y + 160, lobbyW - 40, 'left')
+	
+	if lobbyPhase == 'ready' or lobbyPhase == 'waiting' then
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.printf('Ready Status:', x + 20, y + 180, lobbyW - 40, 'left')
+		
+		-- My ready status
+		local myReady = multiplayer.isMyReady()
+		local myReadyColor = myReady and {0.2, 1, 0.2, 1} or {0.8, 0.8, 0.8, 1}
+		love.graphics.setColor(myReadyColor)
+		love.graphics.printf('You: ' .. (myReady and 'Ready' or 'Not Ready'), x + 40, y + 200, lobbyW - 60, 'left')
+		
+		-- Opponent ready status
+		local opponentReady = multiplayer.isOpponentReady()
+		local opponentReadyColor = opponentReady and {0.2, 1, 0.2, 1} or {0.8, 0.8, 0.8, 1}
+		love.graphics.setColor(opponentReadyColor)
+		love.graphics.printf('Opponent: ' .. (opponentReady and 'Ready' or 'Not Ready'), x + 40, y + 220, lobbyW - 60, 'left')
+		
+		-- Ready button
+		local btnW, btnH = 120, 40
+		local btnX = x + (lobbyW - btnW) * 0.5
+		local btnY = y + 250
+		
+		local btnColor = myReady and {0.8, 0.2, 0.2, 0.8} or {0.2, 0.8, 0.2, 0.8}
+		local btnText = myReady and 'Not Ready' or 'Ready'
+		
+		love.graphics.setColor(btnColor)
+		love.graphics.rectangle('fill', btnX, btnY, btnW, btnH, 8, 8)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.rectangle('line', btnX, btnY, btnW, btnH, 8, 8)
+		love.graphics.printf(btnText, btnX, btnY + 12, btnW, 'center')
+		
+		-- Store button position for click detection
+		multiplayerInput.readyButton = {x = btnX, y = btnY, w = btnW, h = btnH}
+		
+		-- Start game button (if both ready AND host)
+		if multiplayer.canStartGame() and multiplayer.getMode() == 'host' then
+			local startBtnW, startBtnH = 150, 40
+			local startBtnX = x + (lobbyW - startBtnW) * 0.5
+			local startBtnY = btnY + btnH + 10
+			
+			love.graphics.setColor(0.2, 0.8, 0.2, 0.8)
+			love.graphics.rectangle('fill', startBtnX, startBtnY, startBtnW, startBtnH, 8, 8)
+			love.graphics.setColor(1, 1, 1, 1)
+			love.graphics.rectangle('line', startBtnX, startBtnY, startBtnW, startBtnH, 8, 8)
+			love.graphics.printf('Start Game', startBtnX, startBtnY + 12, startBtnW, 'center')
+			
+			-- Store button position for click detection
+			multiplayerInput.startButton = {x = startBtnX, y = startBtnY, w = startBtnW, h = startBtnH}
+		elseif multiplayer.canStartGame() and multiplayer.getMode() == 'client' then
+			-- Client waiting for host to start
+			local waitBtnW, waitBtnH = 150, 40
+			local waitBtnX = x + (lobbyW - waitBtnW) * 0.5
+			local waitBtnY = btnY + btnH + 10
+			
+			love.graphics.setColor(0.6, 0.6, 0.6, 0.8)
+			love.graphics.rectangle('fill', waitBtnX, waitBtnY, waitBtnW, waitBtnH, 8, 8)
+			love.graphics.setColor(1, 1, 1, 1)
+			love.graphics.rectangle('line', waitBtnX, waitBtnY, waitBtnW, waitBtnH, 8, 8)
+			love.graphics.printf('Waiting for Host...', waitBtnX, waitBtnY + 12, waitBtnW, 'center')
+			
+			-- No click detection for client
+			multiplayerInput.startButton = nil
+		end
+	else
+		-- Waiting for opponent
+		love.graphics.setColor(1, 1, 0.2, 1)
+		love.graphics.printf('Waiting for opponent...', x + 20, y + 180, lobbyW - 40, 'center')
+	end
+	
+	-- Cancel button
+	local cancelBtnW, cancelBtnH = 80, 30
+	local cancelBtnX = x + 20
+	local cancelBtnY = y + lobbyH - cancelBtnH - 20
+	
+	love.graphics.setColor(0.8, 0.2, 0.2, 0.8)
+	love.graphics.rectangle('fill', cancelBtnX, cancelBtnY, cancelBtnW, cancelBtnH, 4, 4)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', cancelBtnX, cancelBtnY, cancelBtnW, cancelBtnH, 4, 4)
+	love.graphics.printf('Cancel', cancelBtnX, cancelBtnY + 8, cancelBtnW, 'center')
+	
+	-- Store button position for click detection
+	multiplayerInput.cancelLobbyButton = {x = cancelBtnX, y = cancelBtnY, w = cancelBtnW, h = cancelBtnH}
+end
+
+function menus.hitLobbyButton(x, y)
+	local multiplayer = require('src.core.multiplayer')
+	
+	if not multiplayer.isInLobby() then
+		return nil
+	end
+	
+	-- Check ready button
+	if multiplayerInput.readyButton and 
+	   x >= multiplayerInput.readyButton.x and x <= multiplayerInput.readyButton.x + multiplayerInput.readyButton.w and
+	   y >= multiplayerInput.readyButton.y and y <= multiplayerInput.readyButton.y + multiplayerInput.readyButton.h then
+		return 'ready'
+	end
+	
+	-- Check start game button
+	if multiplayerInput.startButton and 
+	   x >= multiplayerInput.startButton.x and x <= multiplayerInput.startButton.x + multiplayerInput.startButton.w and
+	   y >= multiplayerInput.startButton.y and y <= multiplayerInput.startButton.y + multiplayerInput.startButton.h then
+		return 'start'
+	end
+	
+	-- Check cancel button
+	if multiplayerInput.cancelLobbyButton and 
+	   x >= multiplayerInput.cancelLobbyButton.x and x <= multiplayerInput.cancelLobbyButton.x + multiplayerInput.cancelLobbyButton.w and
+	   y >= multiplayerInput.cancelLobbyButton.y and y <= multiplayerInput.cancelLobbyButton.y + multiplayerInput.cancelLobbyButton.h then
+		return 'cancel'
+	end
+	
+	return nil
 end
 
 function menus.drawPassButton(state)
@@ -43,7 +417,14 @@ function menus.drawPassButton(state)
 		love.graphics.rectangle('fill', btnX, btnBY, btnW, btnH, 8, 8)
 		love.graphics.setColor(1,1,1,1)
 		love.graphics.rectangle('line', btnX, btnBY, btnW, btnH, 8, 8)
-		love.graphics.printf('PLAYER B PASS', btnX, btnBY + 12, btnW, 'center')
+		-- Show different text for multiplayer
+		if state.multiplayer and state.multiplayer.isMultiplayer then
+			local multiplayer = require('src.core.multiplayer')
+			local playerName = multiplayer.getMode() == 'host' and 'OPPONENT' or 'YOU'
+			love.graphics.printf(playerName .. ' PASS', btnX, btnBY + 12, btnW, 'center')
+		else
+			love.graphics.printf('PLAYER B PASS', btnX, btnBY + 12, btnW, 'center')
+		end
 	else
 		love.graphics.setColor(0.2,0.8,0.2,0.8)
 		love.graphics.rectangle('fill', btnX, btnBY, btnW, btnH, 8, 8)
@@ -57,7 +438,14 @@ function menus.drawPassButton(state)
 		love.graphics.rectangle('fill', btnX, btnAY, btnW, btnH, 8, 8)
 		love.graphics.setColor(1,1,1,1)
 		love.graphics.rectangle('line', btnX, btnAY, btnW, btnH, 8, 8)
-		love.graphics.printf('PLAYER A PASS', btnX, btnAY + 12, btnW, 'center')
+		-- Show different text for multiplayer
+		if state.multiplayer and state.multiplayer.isMultiplayer then
+			local multiplayer = require('src.core.multiplayer')
+			local playerName = multiplayer.getMode() == 'host' and 'YOU' or 'OPPONENT'
+			love.graphics.printf(playerName .. ' PASS', btnX, btnAY + 12, btnW, 'center')
+		else
+			love.graphics.printf('PLAYER A PASS', btnX, btnAY + 12, btnW, 'center')
+		end
 	else
 		love.graphics.setColor(0.2,0.8,0.2,0.8)
 		love.graphics.rectangle('fill', btnX, btnAY, btnW, btnH, 8, 8)
@@ -186,19 +574,39 @@ function menus.drawResolutionPopup(state)
 	love.graphics.setColor(1, 1, 0, 1)
 	love.graphics.printf('ROUND '..data.round..' RESOLUTION', x + 20, y + 20, popupW - 40, 'center')
 	
+	-- Helper function to calculate text height
+	local function getTextHeight(text, width)
+		local font = love.graphics.getFont()
+		local _, wrappedText = font:getWrap(text, width)
+		return #wrappedText * font:getHeight()
+	end
+	
 	-- Player 1 info
+	local currentY = y + 60
 	love.graphics.setColor(0.2, 0.8, 0.2, 1)
-	love.graphics.printf('Player A:', x + 30, y + 60, popupW - 60, 'left')
+	love.graphics.printf('Player A:', x + 30, currentY, popupW - 60, 'left')
+	currentY = currentY + 20
+	
 	love.graphics.setColor(1, 1, 1, 1)
-	love.graphics.printf('Cards: '..(data.player1Cards or 'None'), x + 30, y + 80, popupW - 60, 'left')
-	love.graphics.printf('Total Strength: '..data.player1Strength, x + 30, y + 100, popupW - 60, 'left')
+	local player1CardsText = 'Cards: '..(data.player1Cards or 'None')
+	love.graphics.printf(player1CardsText, x + 30, currentY, popupW - 60, 'left')
+	currentY = currentY + getTextHeight(player1CardsText, popupW - 60) + 5
+	
+	love.graphics.printf('Total Strength: '..data.player1Strength, x + 30, currentY, popupW - 60, 'left')
+	currentY = currentY + 25 -- Add spacing before Player B
 	
 	-- Player 2 info
 	love.graphics.setColor(0.2, 0.8, 0.2, 1)
-	love.graphics.printf('Player B:', x + 30, y + 140, popupW - 60, 'left')
+	love.graphics.printf('Player B:', x + 30, currentY, popupW - 60, 'left')
+	currentY = currentY + 20
+	
 	love.graphics.setColor(1, 1, 1, 1)
-	love.graphics.printf('Cards: '..(data.player2Cards or 'None'), x + 30, y + 160, popupW - 60, 'left')
-	love.graphics.printf('Total Strength: '..data.player2Strength, x + 30, y + 180, popupW - 60, 'left')
+	local player2CardsText = 'Cards: '..(data.player2Cards or 'None')
+	love.graphics.printf(player2CardsText, x + 30, currentY, popupW - 60, 'left')
+	currentY = currentY + getTextHeight(player2CardsText, popupW - 60) + 5
+	
+	love.graphics.printf('Total Strength: '..data.player2Strength, x + 30, currentY, popupW - 60, 'left')
+	currentY = currentY + 25 -- Add spacing before winner announcement
 	
 	-- Winner announcement
 	local winnerText = ''
@@ -213,16 +621,26 @@ function menus.drawResolutionPopup(state)
 		love.graphics.setColor(0.8, 0.8, 0.2, 1)
 	end
 	
-	love.graphics.printf(winnerText, x + 20, y + 220, popupW - 40, 'center')
+	love.graphics.printf(winnerText, x + 20, currentY, popupW - 40, 'center')
+	currentY = currentY + 25
 	
 	-- Score
 	love.graphics.setColor(1, 1, 1, 1)
-	love.graphics.printf('Match Score: '..data.roundWins[1]..' - '..data.roundWins[2], x + 20, y + 260, popupW - 40, 'center')
+	love.graphics.printf('Match Score: '..data.roundWins[1]..' - '..data.roundWins[2], x + 20, currentY, popupW - 40, 'center')
+	currentY = currentY + 40 -- Increased spacing
+	
+	-- Check if game is over and show winner announcement
+	if data.isGameOver then
+		local winnerName = data.winner == 1 and 'Player A' or 'Player B'
+		love.graphics.setColor(1, 1, 0, 1) -- Yellow
+		love.graphics.printf(winnerName..' IS THE WINNER!', x + 20, currentY, popupW - 40, 'center')
+		currentY = currentY + 40 -- Add spacing after winner announcement
+	end
 	
 	-- Button (Next Round or Exit)
 	local btnW, btnH = 200, 40
 	local btnX = x + (popupW - btnW) * 0.5
-	local btnY = y + 320
+	local btnY = currentY + 20 -- Move button lower
 	
 	local buttonText = 'NEXT ROUND'
 	local buttonColor = {0.2, 0.8, 0.2, 0.8} -- Green
@@ -231,11 +649,6 @@ function menus.drawResolutionPopup(state)
 	if data.isGameOver then
 		buttonText = 'EXIT'
 		buttonColor = {0.8, 0.2, 0.2, 0.8} -- Red
-		
-		-- Show winner announcement above button
-		local winnerName = data.winner == 1 and 'Player A' or 'Player B'
-		love.graphics.setColor(1, 1, 0, 1) -- Yellow
-		love.graphics.printf(winnerName..' IS THE WINNER!', x + 20, y + 280, popupW - 40, 'center')
 	end
 	
 	love.graphics.setColor(buttonColor)

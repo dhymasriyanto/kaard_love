@@ -75,6 +75,63 @@ function ui.drawDeckAndGY(state, cardBack)
 	board.drawDeckAndGY(state, cardBack, ui.drawCard)
 end
 
+function ui.drawMultiplayerStatus(state)
+	local multiplayer = require('src.core.multiplayer')
+	
+	if not multiplayer.isMultiplayer() then
+		return
+	end
+	
+	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+	local status = multiplayer.getConnectionStatus()
+	local playerNames = multiplayer.getPlayerNames()
+	local myPlayerId = multiplayer.getMyPlayerId()
+	
+	-- Status indicator in top-right corner
+	local statusX = w - 200
+	local statusY = 20
+	local statusW = 180
+	local statusH = 60
+	
+	-- Background
+	love.graphics.setColor(0, 0, 0, 0.7)
+	love.graphics.rectangle('fill', statusX, statusY, statusW, statusH, 8, 8)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', statusX, statusY, statusW, statusH, 8, 8)
+	
+	-- Status text
+	local statusText = "Multiplayer"
+	local statusColor = {1, 1, 1, 1}
+	
+	if status == 'connected' then
+		statusText = "Connected"
+		statusColor = {0.2, 1, 0.2, 1}
+	elseif status == 'connecting' then
+		statusText = "Connecting..."
+		statusColor = {1, 1, 0.2, 1}
+	elseif status == 'error' then
+		statusText = "Error"
+		statusColor = {1, 0.2, 0.2, 1}
+	else
+		statusText = "Disconnected"
+		statusColor = {0.8, 0.8, 0.8, 1}
+	end
+	
+	love.graphics.setColor(statusColor)
+	love.graphics.printf(statusText, statusX + 10, statusY + 10, statusW - 20, 'center')
+	
+	-- Player info
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf("You: " .. playerNames[myPlayerId], statusX + 10, statusY + 30, statusW - 20, 'center')
+	
+	-- Show error message if any
+	local lastError = multiplayer.getLastError()
+	if lastError then
+		love.graphics.setColor(1, 0.2, 0.2, 1)
+		love.graphics.printf(lastError, statusX + 10, statusY + 45, statusW - 20, 'center')
+	end
+end
+
 -- Hit testing functions
 function ui.hitHand(state, player, x, y)
 	return hands.hitHand(state, player, x, y)

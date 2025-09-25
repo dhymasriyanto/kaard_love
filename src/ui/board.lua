@@ -7,13 +7,30 @@ local margin = 20
 local function playerOrigin(playerIndex)
 	local screenW, screenH = love.graphics.getWidth(), love.graphics.getHeight()
 	local y
-	if playerIndex == 1 then
-		-- Place Player A field above their bottom hand and GY (mirror of Player B)
-		y = screenH - slotH - 8 - slotH - 28
+	
+	-- Check if in multiplayer mode
+	local multiplayer = require('src.core.multiplayer')
+	if multiplayer.isMultiplayer() then
+		-- In multiplayer: Both players see themselves as Player 1 (bottom) and opponent as Player 2 (top)
+		-- This ensures consistent POV for both host and client
+		if playerIndex == 1 then
+			-- Player 1 (myself) always at bottom
+			y = screenH - slotH - 8 - slotH - 28
+		else
+			-- Player 2 (opponent) always at top
+			y = 8 + slotH + 28
+		end
 	else
-		-- Place Player B field below their top hand and GY
-		y = 8 + slotH + 28
+		-- Single player: Player A at bottom, Player B at top
+		if playerIndex == 1 then
+			-- Place Player A field above their bottom hand and GY (mirror of Player B)
+			y = screenH - slotH - 8 - slotH - 28
+		else
+			-- Place Player B field below their top hand and GY
+			y = 8 + slotH + 28
+		end
 	end
+	
 	return screenW*0.5 - (1.5*slotW + margin), y
 end
 
@@ -42,6 +59,16 @@ function board.draw(state, cardBack, drawCard, drawVictoryIndicators)
 					love.graphics.rectangle('fill', x + slotW - 40, y + 5, 35, 25)
 					love.graphics.setColor(1,1,1,1)
 					love.graphics.printf(tostring(str), x + slotW - 40, y + 8, 35, 'center')
+				end
+				-- Debug: Show card name for face-down cards in multiplayer
+				if not p.revealed[i] and state.multiplayer and state.multiplayer.isMultiplayer then
+					local card = p.field[i]
+					if card and card.name then
+						love.graphics.setColor(0,0,0,0.7)
+						love.graphics.rectangle('fill', x + 5, y + slotH - 20, slotW - 10, 15)
+						love.graphics.setColor(1,1,1,1)
+						love.graphics.printf(card.name, x + 5, y + slotH - 18, slotW - 10, 'center')
+					end
 				end
 			else
 				love.graphics.setColor(1,1,1,0.15)

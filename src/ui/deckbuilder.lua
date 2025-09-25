@@ -134,25 +134,42 @@ function deckbuilder.draw(state, cardBack)
 	
 	-- Title
 	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Deck Builder - Player '..state.deckBuilderPlayer, w*0.5 - 200, 20, 400, 'center')
+	local title = 'Deck Builder - Player '..state.deckBuilderPlayer
+	if state.multiplayer and state.multiplayer.isMultiplayer then
+		local multiplayer = require('src.core.multiplayer')
+		if multiplayer.isInDeckBuilder() then
+			local phase = multiplayer.getDeckBuilderPhase()
+			local playerName = multiplayer.getMode() == 'host' and 'Host' or 'Client'
+			if phase == 'selecting' then
+				title = 'Multiplayer Deck Builder - ' .. playerName .. ' - Choose Your Deck'
+			elseif phase == 'waiting' then
+				title = 'Multiplayer Deck Builder - ' .. playerName .. ' - Waiting for Opponent'
+			elseif phase == 'ready' then
+				title = 'Multiplayer Deck Builder - ' .. playerName .. ' - Both Decks Ready!'
+			end
+		end
+	end
+	love.graphics.printf(title, w*0.5 - 200, 20, 400, 'center')
 	
-	-- Player switch buttons (bottom-left corner)
-	local btnW, btnH = 80, 25
-	local btnY = h - btnH - 10
-	local p1BtnX = 10
-	local p2BtnX = p1BtnX + btnW + 5
-	
-	-- Player 1 button
-	love.graphics.setColor(state.deckBuilderPlayer == 1 and 0.3 or 0.1, 0.3, 0.8, 0.7)
-	love.graphics.rectangle('fill', p1BtnX, btnY, btnW, btnH, 4, 4)
-	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Player A', p1BtnX, btnY + 5, btnW, 'center')
-	
-	-- Player 2 button
-	love.graphics.setColor(state.deckBuilderPlayer == 2 and 0.3 or 0.1, 0.3, 0.8, 0.7)
-	love.graphics.rectangle('fill', p2BtnX, btnY, btnW, btnH, 4, 4)
-	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Player B', p2BtnX, btnY + 5, btnW, 'center')
+	-- Player switch buttons (bottom-left corner) - Only show in single player mode
+	if not (state.multiplayer and state.multiplayer.isMultiplayer) then
+		local btnW, btnH = 80, 25
+		local btnY = h - btnH - 10
+		local p1BtnX = 10
+		local p2BtnX = p1BtnX + btnW + 5
+		
+		-- Player 1 button
+		love.graphics.setColor(state.deckBuilderPlayer == 1 and 0.3 or 0.1, 0.3, 0.8, 0.7)
+		love.graphics.rectangle('fill', p1BtnX, btnY, btnW, btnH, 4, 4)
+		love.graphics.setColor(1,1,1,1)
+		love.graphics.printf('Player A', p1BtnX, btnY + 5, btnW, 'center')
+		
+		-- Player 2 button
+		love.graphics.setColor(state.deckBuilderPlayer == 2 and 0.3 or 0.1, 0.3, 0.8, 0.7)
+		love.graphics.rectangle('fill', p2BtnX, btnY, btnW, btnH, 4, 4)
+		love.graphics.setColor(1,1,1,1)
+		love.graphics.printf('Player B', p2BtnX, btnY + 5, btnW, 'center')
+	end
 	
 	-- Deck generation buttons (centered, below title)
 	local deckBtnY = 60
@@ -332,11 +349,33 @@ function deckbuilder.draw(state, cardBack)
 	for _, cardData in ipairs(state.playerDecks[2] or {}) do p2Cards = p2Cards + cardData.count end
 	
 	local validationMsg = ''
-	if p1Cards < 15 then validationMsg = 'Player A needs '..(15-p1Cards)..' more cards'
-	elseif p2Cards < 15 then validationMsg = 'Player B needs '..(15-p2Cards)..' more cards'
-	elseif p1Cards > 25 then validationMsg = 'Player A has too many cards ('..p1Cards..'/25)'
-	elseif p2Cards > 25 then validationMsg = 'Player B has too many cards ('..p2Cards..'/25)'
-	else validationMsg = 'Both decks ready! Press Enter to start.'
+	if state.multiplayer and state.multiplayer.isMultiplayer then
+		local multiplayer = require('src.core.multiplayer')
+		if multiplayer.isInDeckBuilder() then
+			local phase = multiplayer.getDeckBuilderPhase()
+			if phase == 'selecting' then
+				local myCards = multiplayer.getMyPlayerId() == 1 and p1Cards or p2Cards
+				if myCards < 15 then 
+					validationMsg = 'You need '..(15-myCards)..' more cards'
+				elseif myCards > 25 then 
+					validationMsg = 'You have too many cards ('..myCards..'/25)'
+				else 
+					validationMsg = 'Your deck is ready! Press Enter to confirm.'
+				end
+			elseif phase == 'waiting' then
+				validationMsg = 'Waiting for opponent to finish their deck...'
+			elseif phase == 'ready' then
+				validationMsg = 'Both decks ready! Press Enter to start game.'
+			end
+		end
+	else
+		-- Single player validation
+		if p1Cards < 15 then validationMsg = 'Player A needs '..(15-p1Cards)..' more cards'
+		elseif p2Cards < 15 then validationMsg = 'Player B needs '..(15-p2Cards)..' more cards'
+		elseif p1Cards > 25 then validationMsg = 'Player A has too many cards ('..p1Cards..'/25)'
+		elseif p2Cards > 25 then validationMsg = 'Player B has too many cards ('..p2Cards..'/25)'
+		else validationMsg = 'Both decks ready! Press Enter to start.'
+		end
 	end
 	
 	love.graphics.setColor(validationMsg:find('ready') and 0.2 or 0.8, validationMsg:find('ready') and 0.8 or 0.2, 0.2, 1)
@@ -344,7 +383,21 @@ function deckbuilder.draw(state, cardBack)
 	
 	-- Instructions
 	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Left-click: add card. Right-click: remove card. Mouse wheel: scroll. ESC: menu.', w*0.5 - 200, h-30, 400, 'center')
+	local instructions = 'Left-click: add card. Right-click: remove card. Mouse wheel: scroll. ESC: menu.'
+	if state.multiplayer and state.multiplayer.isMultiplayer then
+		local multiplayer = require('src.core.multiplayer')
+		if multiplayer.isInDeckBuilder() then
+			local phase = multiplayer.getDeckBuilderPhase()
+			if phase == 'selecting' then
+				instructions = 'Left-click: add card. Right-click: remove card. Mouse wheel: scroll. Enter: confirm deck. ESC: disconnect.'
+			elseif phase == 'waiting' then
+				instructions = 'Waiting for opponent... ESC: disconnect.'
+			elseif phase == 'ready' then
+				instructions = 'Both decks ready! Enter: start game. ESC: disconnect.'
+			end
+		end
+	end
+	love.graphics.printf(instructions, w*0.5 - 200, h-30, 400, 'center')
 	
 	-- Draw card tooltip if hovering over a card
 	local hoveredCard = deckbuilder.getHoveredCard(state)
@@ -445,18 +498,20 @@ end
 function deckbuilder.handleClick(state, x, y, button)
 	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
 	
-	-- Check player switch buttons (bottom-left corner)
-	local btnW, btnH = 80, 25
-	local btnY = h - btnH - 10
-	local p1BtnX = 10
-	local p2BtnX = p1BtnX + btnW + 5
-	
-	if x >= p1BtnX and x <= p1BtnX + btnW and y >= btnY and y <= btnY + btnH then
-		state.deckBuilderPlayer = 1
-		return
-	elseif x >= p2BtnX and x <= p2BtnX + btnW and y >= btnY and y <= btnY + btnH then
-		state.deckBuilderPlayer = 2
-		return
+	-- Check player switch buttons (bottom-left corner) - Only in single player mode
+	if not (state.multiplayer and state.multiplayer.isMultiplayer) then
+		local btnW, btnH = 80, 25
+		local btnY = h - btnH - 10
+		local p1BtnX = 10
+		local p2BtnX = p1BtnX + btnW + 5
+		
+		if x >= p1BtnX and x <= p1BtnX + btnW and y >= btnY and y <= btnY + btnH then
+			state.deckBuilderPlayer = 1
+			return
+		elseif x >= p2BtnX and x <= p2BtnX + btnW and y >= btnY and y <= btnY + btnH then
+			state.deckBuilderPlayer = 2
+			return
+		end
 	end
 	
 	-- Check deck generation buttons (centered with dynamic widths)

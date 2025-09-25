@@ -6,7 +6,19 @@ local handSpacing = slotW + 12 -- no overlap; clear separation
 
 local function handOrigin(playerIndex, count)
 	local screenW, screenH = love.graphics.getWidth(), love.graphics.getHeight()
-	local y = playerIndex==1 and (screenH - slotH - 8) or 8
+	local y
+	
+	-- Check if in multiplayer mode
+	local multiplayer = require('src.core.multiplayer')
+	if multiplayer.isMultiplayer() then
+		-- In multiplayer: Both players see themselves as Player 1 (bottom) and opponent as Player 2 (top)
+		-- This ensures consistent POV for both host and client
+		y = playerIndex==1 and (screenH - slotH - 8) or 8
+	else
+		-- Single player: Player A at bottom, Player B at top
+		y = playerIndex==1 and (screenH - slotH - 8) or 8
+	end
+	
 	local visible = math.min(math.max(count, 1), 12)
 	local totalW = (visible-1) * handSpacing + slotW
 	local x = (screenW - totalW) * 0.5
