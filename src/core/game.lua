@@ -17,6 +17,7 @@ local animations = require('src.core.animations')
 -- UI modules
 local lobby = require('src.ui.lobby')
 local deckbuilder = require('src.ui.deckbuilder')
+local network = require('src.core.network')
 
 -- Utils
 local helpers = require('src.utils.helpers')
@@ -49,6 +50,8 @@ function game.load()
 	gameState.allCards = loader.loadCards('docs/list_card.csv')
 	gameState.flipSound = loader.loadSound('assets/sounds/flip.wav')
 	gameState.background = loader.loadBackground()
+	gameState.deckSelectionComplete = {false, false}
+	gameState.waitingForOpponent = false
 	
 	-- Initialize lobby
 	lobby.init()
@@ -60,9 +63,24 @@ end
 function game.update(dt)
 	local gameState = getState()
 	
+	-- Update network once per frame for all phases
+	if gameState.multiplayer then
+		network.update(dt)
+	end
+	
 	-- Update lobby
 	if gameState.phase == 'lobby' then
 		lobby.update(dt)
+	end
+	
+	-- Handle network messages in deckbuilder (with rate limiting)
+	if gameState.phase == 'deckbuilder' and gameState.multiplayer then
+		local messages = network.getMessages()
+		-- Process max 3 messages per frame to prevent lag in multiplayer
+		local maxMessages = math.min(3, #messages)
+		for i = 1, maxMessages do
+			game.handleNetworkMessage(messages[i])
+		end
 	end
 	
 	-- Delegate animation updates to animations module
@@ -122,16 +140,15 @@ function game.startGame()
 	local gameState = getState()
 	
 	-- Initialize players
-	if gameState.multiplayer and gameState.multiplayer.isMultiplayer() then
-		-- In multiplayer, use multiplayer player IDs
-		local myPlayerId = gameState.multiplayer.getMyPlayerId()
+	if gameState.multiplayer then
+		-- In multiplayer, use network player IDs
+		local myPlayerId = gameState.networkPlayerId
 		local hostName = myPlayerId == 1 and 'Host' or 'Client'
 		local clientName = myPlayerId == 1 and 'Client' or 'Host'
 		gameState.players = {
 			{name=hostName, hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
 			{name=clientName, hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}}
 		}
-		gameState.networkPlayerId = myPlayerId
 	else
 		gameState.players = {
 			{name='Player A', hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
@@ -251,6 +268,11 @@ end
 function game.keypressed(key)
 	local gameState = getState()
 	
+	-- Debug key presses (reduced for performance)
+	-- if key == 'return' then
+	--	print("Return key pressed! Phase:", gameState.phase, "Multiplayer:", gameState.multiplayer)
+	-- end
+	
 	-- Handle lobby keyboard input
 	if gameState.phase == 'lobby' then
 		local lobby = require('src.ui.lobby')
@@ -266,6 +288,39 @@ function game.keypressed(key)
 	end
 	
 	events.keypressed(key)
+end
+
+function game.handleNetworkMessage(message)
+	local gameState = getState()
+	
+	if message:match("^DECK_SELECTED:") then
+		local deckData = message:match("DECK_SELECTED:(.+)")
+		local opponentId = gameState.networkPlayerId == 1 and 2 or 1
+		
+		-- Parse deck data
+		local opponentDeck = {}
+		for cardStr in deckData:gmatch("[^|]+") do
+			local name, count = cardStr:match("([^:]+):(%d+)")
+			if name and count then
+				table.insert(opponentDeck, {name = name, count = tonumber(count)})
+			end
+		end
+		
+		-- Store opponent deck
+		gameState.playerDecks[opponentId] = opponentDeck
+		gameState.deckSelectionComplete[opponentId] = true
+		
+		print("Received opponent deck with", #opponentDeck, "card types")
+		
+		-- Check if both players are ready
+		if gameState.deckSelectionComplete[1] and gameState.deckSelectionComplete[2] then
+			gameState.phase = 'setup'
+			gameState.waitingForOpponent = false
+			print("Both players ready! Starting setup phase...")
+			-- Initialize game state
+			game.startGame()
+		end
+	end
 end
 
 function game.wheelmoved(x, y)

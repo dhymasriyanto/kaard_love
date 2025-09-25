@@ -9,10 +9,11 @@ local setup = require('src.game.setup')
 local deck = require('src.game.deck')
 local helpers = require('src.utils.helpers')
 local config = require('src.data.config')
+local state = require('src.core.state')
 
 -- Get game state
 local function getState()
-	return require('src.core.state').get()
+	return state.get()
 end
 
 -- Logging function

@@ -398,7 +398,7 @@ function lobby.startGame(gameState)
         gameState.phase = 'deckbuilder'
         gameState.multiplayer = true
         gameState.networkPlayerId = 1
-        print("Game starting!")
+        print("Game starting! Host networkPlayerId:", gameState.networkPlayerId)
     end
 end
 
@@ -414,12 +414,11 @@ end
 
 -- Update function
 function lobby.update(dt)
-    network.update(dt)
-    
-    -- Process messages
+    -- Process messages with rate limiting
     local messages = network.getMessages()
-    for _, msg in ipairs(messages) do
-        lobby.handleMessage(msg)
+    local maxMessages = math.min(2, #messages) -- Process max 2 messages per frame
+    for i = 1, maxMessages do
+        lobby.handleMessage(messages[i])
     end
 end
 
@@ -428,10 +427,8 @@ function lobby.handleMessage(message)
         local ready = message:match("READY:(%d)") == "1"
         if network.isHost() then
             state.clientReady = ready
-            print("Client ready:", ready)
         else
             state.hostReady = ready
-            print("Host ready:", ready)
         end
     elseif message == "START_GAME" then
         print("Game starting!")
@@ -439,6 +436,7 @@ function lobby.handleMessage(message)
         gameState.phase = 'deckbuilder'
         gameState.multiplayer = true
         gameState.networkPlayerId = 2
+        print("Client networkPlayerId:", gameState.networkPlayerId)
     end
 end
 

@@ -14,7 +14,10 @@ local state = {
     onClientConnected = nil, -- Callback when client connects
     -- Rate limiting
     lastMessageTime = 0,
-    messageRateLimit = 0.1 -- 100ms between messages
+    messageRateLimit = 0.1, -- 100ms between messages
+    -- Frame rate limiting
+    lastUpdateTime = 0,
+    updateInterval = 1/60 -- Update network at 60fps max
 }
 
 -- Initialize network
@@ -89,12 +92,19 @@ end
 
 -- Update network (call in love.update)
 function network.update(dt)
+    -- Frame rate limiting for network operations
+    local currentTime = love.timer.getTime()
+    if currentTime - state.lastUpdateTime < state.updateInterval then
+        return
+    end
+    state.lastUpdateTime = currentTime
+    
     if state.mode == 'host' and state.server then
         -- Accept new connections
         if not state.connected then
             local client = state.server:accept()
             if client then
-                client:settimeout(0)
+                client:settimeout(0.001)
                 state.client = client
                 state.connected = true
                 print("Network: Client connected!")
@@ -110,8 +120,11 @@ function network.update(dt)
         if state.connected and state.client then
             local data, err = state.client:receive()
             if data then
-                print("Network: Received:", data)
                 table.insert(state.messages, data)
+                -- Limit message queue to prevent memory leak
+                if #state.messages > 100 then
+                    table.remove(state.messages, 1)
+                end
             elseif err == "closed" then
                 print("Network: Client disconnected")
                 state.client:close()
@@ -141,8 +154,11 @@ function network.update(dt)
         if state.connected then
             local data, err = state.client:receive()
             if data then
-                print("Network: Received:", data)
                 table.insert(state.messages, data)
+                -- Limit message queue to prevent memory leak
+                if #state.messages > 100 then
+                    table.remove(state.messages, 1)
+                end
             elseif err == "closed" then
                 print("Network: Host disconnected")
                 state.client:close()

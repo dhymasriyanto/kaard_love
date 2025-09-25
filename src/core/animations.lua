@@ -2,16 +2,18 @@ local animations = {}
 
 -- Import modules
 local config = require('src.data.config')
+local state = require('src.core.state')
+local helpers = require('src.utils.helpers')
 
 -- Get game state
 local function getState()
-	return require('src.core.state').get()
+	return state.get()
 end
 
 -- Logging function
 local function log(message)
 	local gameState = getState()
-	require('src.utils.helpers').log(message, gameState)
+	helpers.log(message, gameState)
 end
 
 -- Phase transition functions

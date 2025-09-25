@@ -1,4 +1,5 @@
 local deckbuilder = {}
+local network = require('src.core.network')
 
 -- Helper functions for deck management
 local function getCardCountInDeck(deck, cardName)
@@ -230,10 +231,15 @@ function deckbuilder.draw(state, cardBack)
 	love.graphics.setColor(1,1,1,1)
 	love.graphics.print('Available Cards', 30, 130)
 	
-	-- Get current deck for card count display
-	local currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
-	
 	local cardY = 160 - state.deckBuilderScroll
+	-- Get current deck for this player
+	local currentDeck
+	if state.multiplayer then
+		currentDeck = state.playerDecks[state.networkPlayerId] or {}
+	else
+		currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
+	end
+	
 	local cardsPerRow = 6
 	local cardW, cardH = 70, 110  -- Bigger cards for better visibility
 	local cardSpacing = 8
@@ -313,7 +319,6 @@ function deckbuilder.draw(state, cardBack)
 	love.graphics.setScissor()
 	
 	-- Current deck (right side) - same size as card selection grid
-	local currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
 	local totalCards = 0
 	for _, cardData in ipairs(currentDeck) do
 		totalCards = totalCards + cardData.count
@@ -513,9 +518,7 @@ function deckbuilder.drawWaitingPopup(w, h)
 	local dots = ""
 	local time = love.timer.getTime()
 	local dotCount = math.floor((time * 2) % 4)
-	for i = 1, dotCount do
-		dots = dots .. "."
-	end
+	dots = string.rep(".", dotCount)
 	love.graphics.printf(dots, x + 10, y + 80, popupW - 20, 'center')
 end
 
@@ -706,7 +709,7 @@ end
 
 -- Handle deck selection confirmation in multiplayer
 function deckbuilder.confirmDeckSelection(state)
-	if not state.multiplayer or not state.network then
+	if not state.multiplayer then
 		return false
 	end
 	
@@ -730,13 +733,23 @@ function deckbuilder.confirmDeckSelection(state)
 	state.deckSelectionComplete[currentPlayerId] = true
 	
 	-- Send deck to opponent
-	state.network.sendDeckSelected(currentDeck)
+	local deckParts = {}
+	for _, cardData in ipairs(currentDeck) do
+		if cardData.name and cardData.count then
+			table.insert(deckParts, cardData.name .. ":" .. cardData.count)
+		end
+	end
+	local deckData = table.concat(deckParts, "|")
+	network.sendMessage("DECK_SELECTED:" .. deckData)
 	
 	-- Check if both players are ready
 	if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
 		-- Both players ready, start game
 		state.phase = 'setup'
 		state.waitingForOpponent = false
+		-- Initialize game state
+		local game = require('src.core.game')
+		game.startGame()
 		return true
 	else
 		-- Wait for opponent
