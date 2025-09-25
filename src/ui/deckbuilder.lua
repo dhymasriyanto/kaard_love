@@ -373,16 +373,81 @@ function deckbuilder.draw(state, cardBack)
 		love.graphics.setColor(validationMsg:find('ready') and 0.2 or 0.8, validationMsg:find('ready') and 0.8 or 0.2, 0.2, 1)
 		love.graphics.printf(validationMsg, w*0.5 - 200, h-80, 400, 'center')
 		
-		-- Show opponent status
-		local opponentStatus = 'Waiting for opponent...'
-		local opponentColor = {0.8, 0.8, 0.2, 1}
-		if state.opponentDeckReady then
-			opponentStatus = 'Opponent ready!'
-			opponentColor = {0.2, 0.8, 0.2, 1}
+		-- Show player status (like in lobby) - better spacing and positioning
+		local playerName = state.networkPlayerId == 1 and 'Host' or 'Client'
+		local opponentName = state.networkPlayerId == 1 and 'Client' or 'Host'
+		
+		-- Status box background - positioned at right center
+		local statusBoxX = w - 250
+		local statusBoxY = h*0.5 - 100
+		local statusBoxW = 230
+		local statusBoxH = 180
+		love.graphics.setColor(0, 0, 0, 0.7)
+		love.graphics.rectangle('fill', statusBoxX, statusBoxY, statusBoxW, statusBoxH, 8, 8)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.rectangle('line', statusBoxX, statusBoxY, statusBoxW, statusBoxH, 8, 8)
+		
+		-- Title
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.printf('MULTIPLAYER STATUS', statusBoxX + 10, statusBoxY + 10, statusBoxW - 20, 'center')
+		
+		-- Host deck selection status
+		local hostDeckStatus = 'Host Deck: ' .. (state.deckSelectionComplete[1] and 'SELECTED' or 'SELECTING')
+		local hostDeckColor = state.deckSelectionComplete[1] and {0.2, 0.8, 0.2, 1} or {0.8, 0.8, 0.2, 1}
+		love.graphics.setColor(hostDeckColor)
+		love.graphics.printf(hostDeckStatus, statusBoxX + 10, statusBoxY + 35, statusBoxW - 20, 'center')
+		
+		-- Client deck selection status
+		local clientDeckStatus = 'Client Deck: ' .. (state.deckSelectionComplete[2] and 'SELECTED' or 'SELECTING')
+		local clientDeckColor = state.deckSelectionComplete[2] and {0.2, 0.8, 0.2, 1} or {0.8, 0.8, 0.2, 1}
+		love.graphics.setColor(clientDeckColor)
+		love.graphics.printf(clientDeckStatus, statusBoxX + 10, statusBoxY + 60, statusBoxW - 20, 'center')
+		
+		-- Host ready status (only show if both decks selected)
+		if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
+			local hostStatus = 'Host: ' .. (state.deckConfirmed[1] and 'READY' or 'NOT READY')
+			local hostColor = state.deckConfirmed[1] and {0.2, 0.8, 0.2, 1} or {0.8, 0.2, 0.2, 1}
+			love.graphics.setColor(hostColor)
+			love.graphics.printf(hostStatus, statusBoxX + 10, statusBoxY + 90, statusBoxW - 20, 'center')
+			
+			-- Client ready status
+			local clientStatus = 'Client: ' .. (state.deckConfirmed[2] and 'READY' or 'NOT READY')
+			local clientColor = state.deckConfirmed[2] and {0.2, 0.8, 0.2, 1} or {0.8, 0.2, 0.2, 1}
+			love.graphics.setColor(clientColor)
+			love.graphics.printf(clientStatus, statusBoxX + 10, statusBoxY + 115, statusBoxW - 20, 'center')
 		end
 		
-		love.graphics.setColor(opponentColor)
-		love.graphics.printf(opponentStatus, w*0.5 - 200, h-50, 400, 'center')
+		-- Ready button (like in lobby) - positioned at right center above status box
+		local readyBtnX = statusBoxX + 40
+		local readyBtnY = statusBoxY - 50
+		local readyBtnW = 150
+		local readyBtnH = 40
+		
+		local readyColor = state.deckConfirmed[state.networkPlayerId] and {0.8, 0.2, 0.2, 1} or {0.2, 0.8, 0.2, 1}
+		local readyText = state.deckConfirmed[state.networkPlayerId] and 'NOT READY' or 'READY'
+		
+		love.graphics.setColor(readyColor)
+		love.graphics.rectangle('fill', readyBtnX, readyBtnY, readyBtnW, readyBtnH, 4, 4)
+		love.graphics.setColor(1, 1, 1, 1)
+		love.graphics.printf(readyText, readyBtnX, readyBtnY + 12, readyBtnW, 'center')
+		
+		-- To Setup Phase button (only if both ready AND current player is host)
+		if state.deckConfirmed[1] and state.deckConfirmed[2] and state.networkPlayerId == 1 then
+			local startBtnX = statusBoxX + 40
+			local startBtnY = statusBoxY + statusBoxH + 10
+			local startBtnW = 150
+			local startBtnH = 40
+			
+			love.graphics.setColor(0.8, 0.8, 0.2, 1)
+			love.graphics.rectangle('fill', startBtnX, startBtnY, startBtnW, startBtnH, 4, 4)
+			love.graphics.setColor(1, 1, 1, 1)
+			love.graphics.printf('TO SETUP PHASE', startBtnX, startBtnY + 12, startBtnW, 'center')
+		elseif state.deckConfirmed[1] and state.deckConfirmed[2] and state.networkPlayerId == 2 then
+			-- Client waiting for host to start
+			local waitText = 'Waiting for Host to start setup phase...'
+			love.graphics.setColor(0.8, 0.8, 0.2, 1)
+			love.graphics.printf(waitText, statusBoxX + 10, statusBoxY + statusBoxH + 10, statusBoxW - 20, 'center')
+		end
 		
 		-- Show waiting popup if waiting for opponent
 		if state.waitingForOpponent then
@@ -535,6 +600,35 @@ end
 
 function deckbuilder.handleClick(state, x, y, button)
 	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+	
+	-- Check multiplayer buttons first
+	if state.multiplayer then
+		-- Ready button
+		local statusBoxX = w - 250
+		local statusBoxY = h*0.5 - 100
+		local readyBtnX = statusBoxX + 40
+		local readyBtnY = statusBoxY - 50
+		local readyBtnW = 150
+		local readyBtnH = 40
+		
+		if x >= readyBtnX and x <= readyBtnX + readyBtnW and y >= readyBtnY and y <= readyBtnY + readyBtnH then
+			deckbuilder.toggleReady(state)
+			return
+		end
+		
+		-- To Setup Phase button (only if both ready AND current player is host)
+		if state.deckConfirmed[1] and state.deckConfirmed[2] and state.networkPlayerId == 1 then
+			local startBtnX = statusBoxX + 40
+			local startBtnY = statusBoxY + 190
+			local startBtnW = 150
+			local startBtnH = 40
+			
+			if x >= startBtnX and x <= startBtnX + startBtnW and y >= startBtnY and y <= startBtnY + startBtnH then
+				deckbuilder.startGame(state)
+				return
+			end
+		end
+	end
 	
 	-- Check player switch buttons (bottom-left corner) - only in single player mode
 	if not state.multiplayer then
@@ -733,49 +827,100 @@ function deckbuilder.confirmDeckSelection(state)
 		return false
 	end
 	
-	-- Send deck to opponent
-	state.network.sendDeckSelected(currentDeck)
-	print('📤 Deck sent to opponent')
+	-- Send simple deck selection message (like lobby style)
+	local message = "DECK_SELECTED:" .. currentPlayerId
+	print('About to send message: ' .. message)
+	local success = state.network.sendMessage(message)
+	print('DECK_SELECTED message sent for player ' .. currentPlayerId .. ' (success: ' .. tostring(success) .. ')')
 	
-	-- Mark current player as confirmed
-	state.deckConfirmed[currentPlayerId] = true
-	print('✅ Player ' .. currentPlayerId .. ' deck confirmed')
-	print('🔍 DEBUG: deckConfirmed[1]=' .. tostring(state.deckConfirmed[1]) .. ', deckConfirmed[2]=' .. tostring(state.deckConfirmed[2]))
+	-- Mark current player's deck as selected
+	state.deckSelectionComplete[currentPlayerId] = true
+	print('Player ' .. currentPlayerId .. ' deck selected and marked as complete')
+	print('DEBUG: deckSelectionComplete[1]=' .. tostring(state.deckSelectionComplete[1]) .. ', deckSelectionComplete[2]=' .. tostring(state.deckSelectionComplete[2]))
+	print('DEBUG: networkPlayerId=' .. tostring(state.networkPlayerId) .. ', multiplayer=' .. tostring(state.multiplayer))
+	print('DEBUG: network module exists=' .. tostring(state.network ~= nil))
 	
-	-- Check if both players are ready
-	if state.deckConfirmed[1] and state.deckConfirmed[2] then
-		-- Both players ready, start game immediately
-		state.waitingForOpponent = false
-		print('🎮 BOTH PLAYERS CONFIRMED! Starting game immediately...')
-		
-		-- Start the game immediately
-		local game = require('src.core.game')
-		game.startGame()
-		return true
+	-- Check if both players have selected their decks
+	if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
+		state.notification.text = 'Both decks selected! Click Ready when you are ready to start.'
+		state.notification.timer = 3.0
+		print('Both decks selected, waiting for Ready button...')
 	else
-		-- Wait for opponent
-		state.waitingForOpponent = true
-		state.notification.text = 'Deck confirmed! Waiting for opponent...'
-		state.notification.timer = 2.0
-		print('⏳ Player ' .. currentPlayerId .. ' waiting for opponent confirmation...')
-		return false
+		state.notification.text = 'Deck selected! Waiting for opponent to select deck...'
+		state.notification.timer = 3.0
+		print('Deck selected, waiting for opponent deck...')
 	end
+	return false
 end
 
--- Handle opponent deck received
-function deckbuilder.handleOpponentDeck(state, deckData)
-	if not state.multiplayer then
+-- Toggle ready status (like in lobby)
+function deckbuilder.toggleReady(state)
+	if not state.multiplayer or not state.network then
 		return
 	end
 	
-	local opponentId = state.networkPlayerId == 1 and 2 or 1
-	state.playerDecks[opponentId] = deckData
+	-- Check if both players have selected their decks first
+	if not (state.deckSelectionComplete[1] and state.deckSelectionComplete[2]) then
+		state.notification.text = 'Both players must select their decks first!'
+		state.notification.timer = 2.0
+		print('Cannot ready - not both decks selected')
+		return
+	end
 	
-	print('📨 Opponent deck received. Player ' .. opponentId .. ' deck stored.')
+	local currentPlayerId = state.networkPlayerId
+	state.deckConfirmed[currentPlayerId] = not state.deckConfirmed[currentPlayerId]
 	
-	-- Note: deckConfirmed flag is now handled in game.handleNetworkMessage()
-	-- This function just stores the deck data
+	-- Send ready status to opponent
+	local readyValue = state.deckConfirmed[currentPlayerId] and "1" or "0"
+	local readyMessage = "READY:" .. readyValue
+	print('About to send READY message: ' .. readyMessage)
+	local success = state.network.sendMessage(readyMessage)
+	print('Ready status sent: ' .. (state.deckConfirmed[currentPlayerId] and 'READY' or 'NOT READY') .. ' (success: ' .. tostring(success) .. ')')
+	
+	-- Check if both players are ready
+	if state.deckConfirmed[1] and state.deckConfirmed[2] then
+		print('BOTH PLAYERS READY! Game can start.')
+		state.notification.text = 'Both players ready! Click Start Game.'
+		state.notification.timer = 2.0
+	else
+		print('Waiting for opponent to be ready...')
+		state.notification.text = 'Waiting for opponent to be ready...'
+		state.notification.timer = 2.0
+	end
 end
+
+-- Start game (only when both ready and current player is host)
+function deckbuilder.startGame(state)
+	if not state.multiplayer or not state.network then
+		return
+	end
+	
+	-- Only host can start game
+	if state.networkPlayerId ~= 1 then
+		print('Only host can start game!')
+		state.notification.text = 'Only host can start the game!'
+		state.notification.timer = 2.0
+		return
+	end
+	
+	if state.deckConfirmed[1] and state.deckConfirmed[2] then
+		print('HOST STARTING SETUP PHASE!')
+		state.waitingForOpponent = false
+		
+		-- Send start setup phase message to client
+		state.network.sendMessage("START_SETUP_PHASE")
+		print('Sent START_SETUP_PHASE to client')
+		
+		-- Start the game (setup phase)
+		local game = require('src.core.game')
+		game.startGame()
+	else
+		print('Cannot start setup phase - not both players ready')
+		state.notification.text = 'Both players must be ready to start!'
+		state.notification.timer = 2.0
+	end
+end
+
 
 -- Update function for deckbuilder (similar to lobby)
 function deckbuilder.update(dt, state)
@@ -799,3 +944,4 @@ function deckbuilder.update(dt, state)
 end
 
 return deckbuilder
+

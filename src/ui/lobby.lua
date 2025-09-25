@@ -398,6 +398,9 @@ function lobby.startGame(gameState)
         gameState.phase = 'deckbuilder'
         gameState.multiplayer = true
         gameState.networkPlayerId = 1
+        -- Initialize deck selection tracking
+        gameState.deckSelectionComplete = {false, false}
+        gameState.deckConfirmed = {false, false}
         print("Game starting!")
     end
 end
@@ -434,11 +437,18 @@ function lobby.handleMessage(message)
             print("Host ready:", ready)
         end
     elseif message == "START_GAME" then
-        print("Game starting!")
+        print("Game starting from lobby - going to deckbuilder!")
         local gameState = require('src.core.state').get()
+        gameState.waitingForOpponent = false
         gameState.phase = 'deckbuilder'
         gameState.multiplayer = true
         gameState.networkPlayerId = 2
+    elseif message == "START_SETUP_PHASE" then
+        print("Setup phase starting from deckbuilder!")
+        local gameState = require('src.core.state').get()
+        gameState.waitingForOpponent = false
+        local game = require('src.core.game')
+        game.startGame()
     else
         -- Handle structured messages
         local decodedMessage = network.decodeMessage(message)

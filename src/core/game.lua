@@ -82,12 +82,19 @@ function game.update(dt)
 		local messages = gameState.network.getMessages()
 		if #messages > 0 then
 			print('Processing ' .. #messages .. ' network messages')
+			for i, msg in ipairs(messages) do
+				print('Message ' .. i .. ': ' .. msg)
+			end
 		end
 		for _, message in ipairs(messages) do
 			local decodedMessage = gameState.network.decodeMessage(message)
 			if decodedMessage then
-				print('Handling network message: ' .. decodedMessage.type)
+				print('Handling structured network message: ' .. decodedMessage.type)
 				game.handleNetworkMessage(decodedMessage, gameState)
+			else
+				-- Handle simple messages like "READY:1" (same as lobby)
+				print('Handling simple message: ' .. message)
+				game.handleSimpleMessage(message, gameState)
 			end
 		end
 	end
@@ -168,6 +175,15 @@ function game.startGame()
 	print('🚀 DEBUG: Multiplayer=' .. tostring(gameState.multiplayer))
 	print('🚀 DEBUG: NetworkPlayerId=' .. tostring(gameState.networkPlayerId))
 	
+	-- Prevent double start
+	if gameState.phase == 'setup' or gameState.phase == 'combat' then
+		print('⚠️ Game already started, ignoring startGame() call')
+		return
+	end
+	
+	-- Clear waiting popup if it exists
+	gameState.waitingForOpponent = false
+	
 	-- Initialize players
 	if gameState.multiplayer and gameState.network and gameState.network.isMultiplayer() then
 		-- In multiplayer, use multiplayer player IDs
@@ -216,32 +232,74 @@ function game.startGame()
 	showPhaseTransition('ROUND '..gameState.currentRound, 2.0)
 end
 
+-- Handle simple messages like "READY:1" (same as lobby)
+function game.handleSimpleMessage(message, gameState)
+	print('Processing simple message: ' .. message)
+	
+	if message:match("^READY:") then
+		local ready = message:match("READY:(%d)") == "1"
+		local opponentId = (gameState.networkPlayerId == 1) and 2 or 1
+		gameState.deckConfirmed[opponentId] = ready
+		print('Ready status received from opponent ' .. opponentId .. ': ' .. (ready and 'READY' or 'NOT READY'))
+		print('DEBUG: deckConfirmed[1]=' .. tostring(gameState.deckConfirmed[1]) .. ', deckConfirmed[2]=' .. tostring(gameState.deckConfirmed[2]))
+		
+		-- Check if both players are ready and both decks selected
+		if gameState.deckConfirmed[1] and gameState.deckConfirmed[2] and 
+		   gameState.deckSelectionComplete[1] and gameState.deckSelectionComplete[2] then
+			print('BOTH PLAYERS READY AND DECKS SELECTED! Game can start.')
+		end
+	elseif message:match("^DECK_SELECTED:") then
+		-- Handle deck selection message
+		local playerId = tonumber(message:match("DECK_SELECTED:(%d)"))
+		print('DECK_SELECTED message received, playerId=' .. tostring(playerId))
+		if playerId then
+			local opponentId = (gameState.networkPlayerId == 1) and 2 or 1
+			print('Current player=' .. gameState.networkPlayerId .. ', opponent=' .. opponentId)
+			if playerId == opponentId then
+				gameState.deckSelectionComplete[playerId] = true
+				print('Deck selection received from opponent ' .. playerId .. ': SELECTED')
+				print('DEBUG: deckSelectionComplete[1]=' .. tostring(gameState.deckSelectionComplete[1]) .. ', deckSelectionComplete[2]=' .. tostring(gameState.deckSelectionComplete[2]))
+				
+				-- Check if both decks are now selected
+				if gameState.deckSelectionComplete[1] and gameState.deckSelectionComplete[2] then
+					print('Both decks are now selected! Players can ready up.')
+				end
+			else
+				print('Ignoring DECK_SELECTED from player ' .. playerId .. ' (not opponent)')
+			end
+		end
+	elseif message == "START_GAME" then
+		print("Game starting from lobby - going to deckbuilder!")
+		gameState.waitingForOpponent = false
+		gameState.phase = 'deckbuilder'
+		gameState.multiplayer = true
+		gameState.networkPlayerId = 2
+		-- Initialize deck selection tracking
+		gameState.deckSelectionComplete = {false, false}
+		gameState.deckConfirmed = {false, false}
+	elseif message == "START_SETUP_PHASE" then
+		print("Setup phase starting from deckbuilder!")
+		gameState.waitingForOpponent = false
+		game.startGame()
+	end
+end
+
 -- Handle network messages (delegated to multiplayer module)
 function game.handleNetworkMessage(message, gameState)
 	if message.type == network.MESSAGE_TYPES.PLAYER_READY then
 		-- Handle player ready status
 		local lobby = require('src.ui.lobby')
 		lobby.handleNetworkMessage(message, gameState)
-	elseif message.type == network.MESSAGE_TYPES.PLAYER_DECK_SELECTED then
-		print('📨 Received PLAYER_DECK_SELECTED message, calling handleOpponentDeck...')
-		deckbuilder.handleOpponentDeck(gameState, message.data.deck)
-		
-		-- Mark opponent as confirmed
-		local opponentId = (gameState.networkPlayerId == 1) and 2 or 1
-		gameState.deckConfirmed[opponentId] = true
-		print('✅ Opponent ' .. opponentId .. ' deck confirmed')
-		print('🔍 DEBUG: deckConfirmed[1]=' .. tostring(gameState.deckConfirmed[1]) .. ', deckConfirmed[2]=' .. tostring(gameState.deckConfirmed[2]))
-		
-		-- Check if both players are ready
-		if gameState.deckConfirmed[1] and gameState.deckConfirmed[2] then
-			print('🎮 BOTH PLAYERS CONFIRMED! Starting game from network message...')
-			game.startGame()
-		end
 	elseif message.type == network.MESSAGE_TYPES.GAME_START then
 		-- Host started the game, transition to deck builder
 		gameState.phase = 'deckbuilder'
 		gameState.multiplayer = true
 		gameState.networkPlayerId = gameState.network.getPlayerId()
+	elseif message.type == "START_SETUP_PHASE" then
+		-- Host started setup phase from deckbuilder, client should start too
+		print('🎮 Received START_SETUP_PHASE from host, starting setup phase...')
+		gameState.waitingForOpponent = false
+		game.startGame()
 	elseif message.type == network.MESSAGE_TYPES.CARD_PLACED then
 		-- Handle card placement from opponent
 		local playerId = message.data.playerId
