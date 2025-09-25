@@ -188,6 +188,18 @@ end
 function network.getMessages()
     local msgs = state.messages
     state.messages = {}
+    
+    -- Limit message processing to prevent lag from message spam
+    local maxMessagesPerFrame = 10
+    if #msgs > maxMessagesPerFrame then
+        -- Keep only the most recent messages
+        local recentMsgs = {}
+        for i = math.max(1, #msgs - maxMessagesPerFrame + 1), #msgs do
+            table.insert(recentMsgs, msgs[i])
+        end
+        return recentMsgs
+    end
+    
     return msgs
 end
 

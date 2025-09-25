@@ -1,5 +1,8 @@
 local game = {}
 
+-- Cache for card back image to avoid reloading every frame
+local cardBackCache = nil
+
 -- Import all modules
 local loader = require('src.utils.loader')
 local ui = require('src.ui.ui')
@@ -67,11 +70,27 @@ function game.update(dt)
 	
 	-- Delegate animation updates to animations module
 	animations.update(dt)
+	
+	-- Periodic garbage collection to prevent memory leaks
+	-- Only run every 5 seconds to avoid performance impact
+	if not gameState.lastGC then
+		gameState.lastGC = 0
+	end
+	gameState.lastGC = gameState.lastGC + dt
+	if gameState.lastGC >= 5.0 then
+		collectgarbage("collect")
+		gameState.lastGC = 0
+	end
 end
 
 function game.draw()
 	local gameState = getState()
-	local cardBack = loader.loadCardBack()
+	
+	-- Use cached card back to avoid reloading every frame
+	if not cardBackCache then
+		cardBackCache = loader.loadCardBack()
+	end
+	local cardBack = cardBackCache
 	
 	-- Draw game background
 	if gameState.background then

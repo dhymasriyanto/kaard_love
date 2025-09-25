@@ -1,5 +1,9 @@
 local deckbuilder = {}
 
+-- Cache for archetype grouping to avoid recreating every frame
+local archetypeCache = {}
+local lastAllCardsHash = nil
+
 -- Helper functions for deck management
 local function getCardCountInDeck(deck, cardName)
 	if not deck then return 0 end
@@ -231,7 +235,12 @@ function deckbuilder.draw(state, cardBack)
 	love.graphics.print('Available Cards', 30, 130)
 	
 	-- Get current deck for card count display
-	local currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
+	local currentDeck
+	if state.multiplayer then
+		currentDeck = state.playerDecks[state.networkPlayerId] or {}
+	else
+		currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
+	end
 	
 	local cardY = 160 - state.deckBuilderScroll
 	local cardsPerRow = 6
@@ -241,14 +250,21 @@ function deckbuilder.draw(state, cardBack)
 	
 	love.graphics.setScissor(20, 120, w*0.4, h-180)
 	
-	-- Group cards by archetype
-	local archetypes = {}
-	for _, card in ipairs(state.allCards) do
-		local archetype = card.archetype or 'Other'
-		if not archetypes[archetype] then
-			archetypes[archetype] = {}
+	-- Use cached archetype grouping to avoid recreating every frame
+	local archetypes = archetypeCache
+	local currentHash = #state.allCards -- Simple hash based on card count
+	if lastAllCardsHash ~= currentHash then
+		-- Rebuild cache only when cards change
+		archetypes = {}
+		for _, card in ipairs(state.allCards) do
+			local archetype = card.archetype or 'Other'
+			if not archetypes[archetype] then
+				archetypes[archetype] = {}
+			end
+			table.insert(archetypes[archetype], card)
 		end
-		table.insert(archetypes[archetype], card)
+		archetypeCache = archetypes
+		lastAllCardsHash = currentHash
 	end
 	
 	local currentY = cardY
@@ -313,7 +329,12 @@ function deckbuilder.draw(state, cardBack)
 	love.graphics.setScissor()
 	
 	-- Current deck (right side) - same size as card selection grid
-	local currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
+	local currentDeck
+	if state.multiplayer then
+		currentDeck = state.playerDecks[state.networkPlayerId] or {}
+	else
+		currentDeck = state.playerDecks[state.deckBuilderPlayer] or {}
+	end
 	local totalCards = 0
 	for _, cardData in ipairs(currentDeck) do
 		totalCards = totalCards + cardData.count
@@ -414,15 +435,8 @@ function deckbuilder.getHoveredCard(state)
 		local archetypeSpacing = 20
 		local cardY = 160 - state.deckBuilderScroll
 		
-		-- Group cards by archetype (same logic as drawing)
-		local archetypes = {}
-		for _, card in ipairs(state.allCards) do
-			local archetype = card.archetype or 'Other'
-			if not archetypes[archetype] then
-				archetypes[archetype] = {}
-			end
-			table.insert(archetypes[archetype], card)
-		end
+		-- Use cached archetype grouping (same as drawing function)
+		local archetypes = archetypeCache
 		
 		local currentY = cardY
 		for archetypeName, cards in pairs(archetypes) do
@@ -645,15 +659,8 @@ function deckbuilder.handleClick(state, x, y, button)
 		local archetypeSpacing = 20
 		local cardY = 160 - state.deckBuilderScroll
 		
-		-- Group cards by archetype (same logic as drawing)
-		local archetypes = {}
-		for _, card in ipairs(state.allCards) do
-			local archetype = card.archetype or 'Other'
-			if not archetypes[archetype] then
-				archetypes[archetype] = {}
-			end
-			table.insert(archetypes[archetype], card)
-		end
+		-- Use cached archetype grouping (same as drawing function)
+		local archetypes = archetypeCache
 		
 		local currentY = cardY
 		for archetypeName, cards in pairs(archetypes) do
