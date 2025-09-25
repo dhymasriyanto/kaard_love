@@ -134,25 +134,32 @@ function deckbuilder.draw(state, cardBack)
 	
 	-- Title
 	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Deck Builder - Player '..state.deckBuilderPlayer, w*0.5 - 200, 20, 400, 'center')
+	if state.multiplayer then
+		local playerName = state.networkPlayerId == 1 and 'Host' or 'Client'
+		love.graphics.printf('Deck Builder - ' .. playerName, w*0.5 - 200, 20, 400, 'center')
+	else
+		love.graphics.printf('Deck Builder - Player '..state.deckBuilderPlayer, w*0.5 - 200, 20, 400, 'center')
+	end
 	
-	-- Player switch buttons (bottom-left corner)
-	local btnW, btnH = 80, 25
-	local btnY = h - btnH - 10
-	local p1BtnX = 10
-	local p2BtnX = p1BtnX + btnW + 5
-	
-	-- Player 1 button
-	love.graphics.setColor(state.deckBuilderPlayer == 1 and 0.3 or 0.1, 0.3, 0.8, 0.7)
-	love.graphics.rectangle('fill', p1BtnX, btnY, btnW, btnH, 4, 4)
-	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Player A', p1BtnX, btnY + 5, btnW, 'center')
-	
-	-- Player 2 button
-	love.graphics.setColor(state.deckBuilderPlayer == 2 and 0.3 or 0.1, 0.3, 0.8, 0.7)
-	love.graphics.rectangle('fill', p2BtnX, btnY, btnW, btnH, 4, 4)
-	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Player B', p2BtnX, btnY + 5, btnW, 'center')
+	-- Player switch buttons (bottom-left corner) - only show in single player mode
+	if not state.multiplayer then
+		local btnW, btnH = 80, 25
+		local btnY = h - btnH - 10
+		local p1BtnX = 10
+		local p2BtnX = p1BtnX + btnW + 5
+		
+		-- Player 1 button
+		love.graphics.setColor(state.deckBuilderPlayer == 1 and 0.3 or 0.1, 0.3, 0.8, 0.7)
+		love.graphics.rectangle('fill', p1BtnX, btnY, btnW, btnH, 4, 4)
+		love.graphics.setColor(1,1,1,1)
+		love.graphics.printf('Player A', p1BtnX, btnY + 5, btnW, 'center')
+		
+		-- Player 2 button
+		love.graphics.setColor(state.deckBuilderPlayer == 2 and 0.3 or 0.1, 0.3, 0.8, 0.7)
+		love.graphics.rectangle('fill', p2BtnX, btnY, btnW, btnH, 4, 4)
+		love.graphics.setColor(1,1,1,1)
+		love.graphics.printf('Player B', p2BtnX, btnY + 5, btnW, 'center')
+	end
 	
 	-- Deck generation buttons (centered, below title)
 	local deckBtnY = 60
@@ -326,21 +333,58 @@ function deckbuilder.draw(state, cardBack)
 	end
 	
 	-- Validation messages
-	local p1Cards = 0
-	for _, cardData in ipairs(state.playerDecks[1] or {}) do p1Cards = p1Cards + cardData.count end
-	local p2Cards = 0
-	for _, cardData in ipairs(state.playerDecks[2] or {}) do p2Cards = p2Cards + cardData.count end
-	
-	local validationMsg = ''
-	if p1Cards < 15 then validationMsg = 'Player A needs '..(15-p1Cards)..' more cards'
-	elseif p2Cards < 15 then validationMsg = 'Player B needs '..(15-p2Cards)..' more cards'
-	elseif p1Cards > 25 then validationMsg = 'Player A has too many cards ('..p1Cards..'/25)'
-	elseif p2Cards > 25 then validationMsg = 'Player B has too many cards ('..p2Cards..'/25)'
-	else validationMsg = 'Both decks ready! Press Enter to start.'
+	if state.multiplayer then
+		-- Multiplayer mode - only check current player's deck
+		local currentPlayerId = state.networkPlayerId
+		local currentDeck = state.playerDecks[currentPlayerId] or {}
+		local currentCards = 0
+		for _, cardData in ipairs(currentDeck) do currentCards = currentCards + cardData.count end
+		
+		local validationMsg = ''
+		if currentCards < 15 then 
+			validationMsg = 'You need '..(15-currentCards)..' more cards'
+		elseif currentCards > 25 then 
+			validationMsg = 'You have too many cards ('..currentCards..'/25)'
+		else 
+			validationMsg = 'Your deck is ready! Press Enter to confirm.'
+		end
+		
+		love.graphics.setColor(validationMsg:find('ready') and 0.2 or 0.8, validationMsg:find('ready') and 0.8 or 0.2, 0.2, 1)
+		love.graphics.printf(validationMsg, w*0.5 - 200, h-80, 400, 'center')
+		
+		-- Show opponent status
+		local opponentStatus = 'Waiting for opponent...'
+		local opponentColor = {0.8, 0.8, 0.2, 1}
+		if state.opponentDeckReady then
+			opponentStatus = 'Opponent ready!'
+			opponentColor = {0.2, 0.8, 0.2, 1}
+		end
+		
+		love.graphics.setColor(opponentColor)
+		love.graphics.printf(opponentStatus, w*0.5 - 200, h-50, 400, 'center')
+		
+		-- Show waiting popup if waiting for opponent
+		if state.waitingForOpponent then
+			deckbuilder.drawWaitingPopup(w, h)
+		end
+	else
+		-- Single player mode - check both decks
+		local p1Cards = 0
+		for _, cardData in ipairs(state.playerDecks[1] or {}) do p1Cards = p1Cards + cardData.count end
+		local p2Cards = 0
+		for _, cardData in ipairs(state.playerDecks[2] or {}) do p2Cards = p2Cards + cardData.count end
+		
+		local validationMsg = ''
+		if p1Cards < 15 then validationMsg = 'Player A needs '..(15-p1Cards)..' more cards'
+		elseif p2Cards < 15 then validationMsg = 'Player B needs '..(15-p2Cards)..' more cards'
+		elseif p1Cards > 25 then validationMsg = 'Player A has too many cards ('..p1Cards..'/25)'
+		elseif p2Cards > 25 then validationMsg = 'Player B has too many cards ('..p2Cards..'/25)'
+		else validationMsg = 'Both decks ready! Press Enter to start.'
+		end
+		
+		love.graphics.setColor(validationMsg:find('ready') and 0.2 or 0.8, validationMsg:find('ready') and 0.8 or 0.2, 0.2, 1)
+		love.graphics.printf(validationMsg, w*0.5 - 200, h-50, 400, 'center')
 	end
-	
-	love.graphics.setColor(validationMsg:find('ready') and 0.2 or 0.8, validationMsg:find('ready') and 0.8 or 0.2, 0.2, 1)
-	love.graphics.printf(validationMsg, w*0.5 - 200, h-50, 400, 'center')
 	
 	-- Instructions
 	love.graphics.setColor(1,1,1,1)
@@ -442,21 +486,56 @@ function deckbuilder.drawNotification(text, w, h)
 	love.graphics.printf(text, x + 10, y + 15, notifW - 20, 'center')
 end
 
+function deckbuilder.drawWaitingPopup(w, h)
+	local popupW, popupH = 300, 150
+	local x = (w - popupW) * 0.5
+	local y = (h - popupH) * 0.5
+	
+	-- Background overlay
+	love.graphics.setColor(0, 0, 0, 0.7)
+	love.graphics.rectangle('fill', 0, 0, w, h)
+	
+	-- Popup background
+	love.graphics.setColor(0, 0, 0, 0.9)
+	love.graphics.rectangle('fill', x, y, popupW, popupH, 12, 12)
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.rectangle('line', x, y, popupW, popupH, 12, 12)
+	
+	-- Title
+	love.graphics.setColor(1, 1, 0, 1)
+	love.graphics.printf('Waiting for Opponent', x + 10, y + 20, popupW - 20, 'center')
+	
+	-- Message
+	love.graphics.setColor(1, 1, 1, 1)
+	love.graphics.printf('Your opponent is still selecting their deck. Please wait...', x + 10, y + 50, popupW - 20, 'center')
+	
+	-- Animated dots
+	local dots = ""
+	local time = love.timer.getTime()
+	local dotCount = math.floor((time * 2) % 4)
+	for i = 1, dotCount do
+		dots = dots .. "."
+	end
+	love.graphics.printf(dots, x + 10, y + 80, popupW - 20, 'center')
+end
+
 function deckbuilder.handleClick(state, x, y, button)
 	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
 	
-	-- Check player switch buttons (bottom-left corner)
-	local btnW, btnH = 80, 25
-	local btnY = h - btnH - 10
-	local p1BtnX = 10
-	local p2BtnX = p1BtnX + btnW + 5
-	
-	if x >= p1BtnX and x <= p1BtnX + btnW and y >= btnY and y <= btnY + btnH then
-		state.deckBuilderPlayer = 1
-		return
-	elseif x >= p2BtnX and x <= p2BtnX + btnW and y >= btnY and y <= btnY + btnH then
-		state.deckBuilderPlayer = 2
-		return
+	-- Check player switch buttons (bottom-left corner) - only in single player mode
+	if not state.multiplayer then
+		local btnW, btnH = 80, 25
+		local btnY = h - btnH - 10
+		local p1BtnX = 10
+		local p2BtnX = p1BtnX + btnW + 5
+		
+		if x >= p1BtnX and x <= p1BtnX + btnW and y >= btnY and y <= btnY + btnH then
+			state.deckBuilderPlayer = 1
+			return
+		elseif x >= p2BtnX and x <= p2BtnX + btnW and y >= btnY and y <= btnY + btnH then
+			state.deckBuilderPlayer = 2
+			return
+		end
 	end
 	
 	-- Check deck generation buttons (centered with dynamic widths)
@@ -491,7 +570,12 @@ function deckbuilder.handleClick(state, x, y, button)
 		-- Generate random deck for current player
 		local targetCards = 20 -- Generate 20 cards by default
 		local newDeck = generateRandomDeck(state.allCards, targetCards)
-		state.playerDecks[state.deckBuilderPlayer] = newDeck
+		
+		if state.multiplayer then
+			state.playerDecks[state.networkPlayerId] = newDeck
+		else
+			state.playerDecks[state.deckBuilderPlayer] = newDeck
+		end
 		
 		-- Count total cards in deck
 		local totalCards = 0
@@ -509,7 +593,11 @@ function deckbuilder.handleClick(state, x, y, button)
 	local clearBtnX = startX + randomBtnW + 10
 	if x >= clearBtnX and x <= clearBtnX + clearBtnW and y >= deckBtnY and y <= deckBtnY + deckBtnH then
 		-- Clear current player's deck
-		state.playerDecks[state.deckBuilderPlayer] = {}
+		if state.multiplayer then
+			state.playerDecks[state.networkPlayerId] = {}
+		else
+			state.playerDecks[state.deckBuilderPlayer] = {}
+		end
 		
 		-- Show notification
 		state.notification.text = 'Deck cleared!'
@@ -527,7 +615,12 @@ function deckbuilder.handleClick(state, x, y, button)
 			-- Generate pure archetype deck for current player (15 cards max)
 			local targetCards = 15 -- Pure archetype deck with 15 cards
 			local newDeck = generateArchetypeDeck(state.allCards, archetype, targetCards)
-			state.playerDecks[state.deckBuilderPlayer] = newDeck
+			
+			if state.multiplayer then
+				state.playerDecks[state.networkPlayerId] = newDeck
+			else
+				state.playerDecks[state.deckBuilderPlayer] = newDeck
+			end
 			
 			-- Count total cards in deck
 			local totalCards = 0
@@ -578,7 +671,13 @@ function deckbuilder.handleClick(state, x, y, button)
 					
 					-- Check if click is within this specific card
 					if x >= cardX and x <= cardX + cardW and y >= cardY and y <= cardY + cardH then
-						local currentDeck = state.playerDecks[state.deckBuilderPlayer]
+						local currentDeck
+						if state.multiplayer then
+							currentDeck = state.playerDecks[state.networkPlayerId]
+						else
+							currentDeck = state.playerDecks[state.deckBuilderPlayer]
+						end
+						
 						local currentCount = getCardCountInDeck(currentDeck, card.name)
 						local maxCopies = getMaxCopies(card.rarity)
 						
@@ -602,6 +701,70 @@ function deckbuilder.handleClick(state, x, y, button)
 			
 			currentY = currentY + sectionHeight
 		end
+	end
+end
+
+-- Handle deck selection confirmation in multiplayer
+function deckbuilder.confirmDeckSelection(state)
+	if not state.multiplayer or not state.network then
+		return false
+	end
+	
+	local currentPlayerId = state.networkPlayerId
+	local currentDeck = state.playerDecks[currentPlayerId] or {}
+	local currentCards = 0
+	for _, cardData in ipairs(currentDeck) do currentCards = currentCards + cardData.count end
+	
+	-- Validate deck
+	if currentCards < 15 then
+		state.notification.text = 'You need at least 15 cards in your deck!'
+		state.notification.timer = 2.0
+		return false
+	elseif currentCards > 25 then
+		state.notification.text = 'You have too many cards ('..currentCards..'/25)!'
+		state.notification.timer = 2.0
+		return false
+	end
+	
+	-- Mark deck as selected
+	state.deckSelectionComplete[currentPlayerId] = true
+	
+	-- Send deck to opponent
+	state.network.sendDeckSelected(currentDeck)
+	
+	-- Check if both players are ready
+	if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
+		-- Both players ready, start game
+		state.phase = 'setup'
+		state.waitingForOpponent = false
+		return true
+	else
+		-- Wait for opponent
+		state.waitingForOpponent = true
+		state.notification.text = 'Deck confirmed! Waiting for opponent...'
+		state.notification.timer = 2.0
+		return false
+	end
+end
+
+-- Handle opponent deck received
+function deckbuilder.handleOpponentDeck(state, deckData)
+	if not state.multiplayer then
+		return
+	end
+	
+	local opponentId = state.networkPlayerId == 1 and 2 or 1
+	state.playerDecks[opponentId] = deckData
+	state.deckSelectionComplete[opponentId] = true
+	state.opponentDeckReady = true
+	
+	-- Check if both players are ready
+	if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
+		-- Both players ready, start game
+		state.phase = 'setup'
+		state.waitingForOpponent = false
+		state.notification.text = 'Both players ready! Starting game...'
+		state.notification.timer = 2.0
 	end
 end
 

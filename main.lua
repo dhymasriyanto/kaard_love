@@ -28,4 +28,8 @@ function love.wheelmoved(dx, dy)
 	if game.wheelmoved then game.wheelmoved(dx, dy) end
 end
 
+function love.textinput(text)
+	game.textinput(text)
+end
+
 

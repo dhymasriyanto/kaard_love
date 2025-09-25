@@ -21,7 +21,11 @@ function hands.draw(state, cardBack, drawCard)
 		-- Show hand cards based on phase:
 		-- - Setup phase: show all cards face-up for both players
 		-- - Combat phase: current player shows actual cards, opponent shows face-down
+		-- - Multiplayer: always show opponent's cards as face-down
 		local showActualCards = (state.phase == 'setup') or (pIndex == state.turn)
+		if state.multiplayer and state.networkPlayerId ~= pIndex then
+			showActualCards = false -- Always show opponent's cards as face-down in multiplayer
+		end
 		
 		for i=1,#p.hand do
 			local cx = x + (i-1)*handSpacing

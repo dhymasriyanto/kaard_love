@@ -3,17 +3,21 @@ local game = {}
 -- Import all modules
 local loader = require('src.utils.loader')
 local ui = require('src.ui.ui')
-local rules = require('src.rules.rules')
 local menus = require('src.ui.menus')
 
 -- Game modules
-local combat = require('src.game.combat')
 local setup = require('src.game.setup')
-local resolution = require('src.game.resolution')
 local deck = require('src.game.deck')
 
 -- Core modules
 local state = require('src.core.state')
+local events = require('src.core.events')
+local animations = require('src.core.animations')
+local network = require('src.core.network')
+
+-- UI modules
+local lobby = require('src.ui.lobby')
+local deckbuilder = require('src.ui.deckbuilder')
 
 -- Utils
 local helpers = require('src.utils.helpers')
@@ -30,21 +34,13 @@ local function log(message)
 	helpers.log(message, gameState)
 end
 
--- Phase transition functions
+-- Phase transition functions (delegated to animations module)
 local function showPhaseTransition(text, duration)
-	local gameState = getState()
-	duration = duration or config.ANIMATION.PHASE_TRANSITION_DURATION
-	gameState.phaseTransition.text = text
-	gameState.phaseTransition.timer = duration
-	gameState.phaseTransition.show = true
+	animations.showPhaseTransition(text, duration)
 end
 
 local function showResolutionPopup(data, duration)
-	local gameState = getState()
-	duration = duration or config.ANIMATION.RESOLUTION_POPUP_DURATION
-	gameState.resolutionPopup.data = data
-	gameState.resolutionPopup.timer = duration
-	gameState.resolutionPopup.show = true
+	animations.showResolutionPopup(data, duration)
 end
 
 -- Game initialization
@@ -54,6 +50,14 @@ function game.load()
 	gameState.allCards = loader.loadCards('docs/list_card.csv')
 	gameState.flipSound = loader.loadSound('assets/sounds/flip.wav')
 	gameState.background = loader.loadBackground()
+	
+	-- Initialize network module
+	network.init()
+	gameState.network = network
+	
+	-- Initialize lobby
+	lobby.init()
+	
 	gameState.phase = 'menu'
 	log('Game loaded successfully!')
 end
@@ -61,53 +65,19 @@ end
 function game.update(dt)
 	local gameState = getState()
 	
-	-- Update notification timer
-	if gameState.notification.timer > 0 then
-		gameState.notification.timer = gameState.notification.timer - dt
-		if gameState.notification.timer <= 0 then
-			gameState.notification.text = ''
+	-- Update network if in multiplayer mode
+	if gameState.multiplayer and gameState.network then
+		gameState.network.update(dt)
+		
+		-- Process network messages
+		local messages = gameState.network.getQueuedMessages()
+		for _, message in ipairs(messages) do
+			game.handleNetworkMessage(message, gameState)
 		end
 	end
 	
-	-- Update phase transition timer
-	if gameState.phaseTransition.timer > 0 then
-		gameState.phaseTransition.timer = gameState.phaseTransition.timer - dt
-		if gameState.phaseTransition.timer <= 0 then
-			gameState.phaseTransition.show = false
-		end
-	end
-	
-	-- Update resolution popup timer
-	if gameState.resolutionPopup.timer > 0 then
-		gameState.resolutionPopup.timer = gameState.resolutionPopup.timer - dt
-		if gameState.resolutionPopup.timer <= 0 then
-			gameState.resolutionPopup.show = false
-		end
-	end
-	
-	-- Update coin toss animation timer
-	if gameState.coinTossAnimation.timer > 0 then
-		gameState.coinTossAnimation.timer = gameState.coinTossAnimation.timer - dt
-		if gameState.coinTossAnimation.timer <= 0 then
-			-- Animation finished, set first player and start combat
-			gameState.turn = gameState.coinTossAnimation.result
-			gameState.coinFirst = gameState.turn
-			gameState.coinTossAnimation.show = false
-			gameState.phase = 'combat'
-			log(gameState.players[gameState.turn].name..' goes first!')
-			
-			-- Check if combat is even possible
-			if not combat.canContinue(gameState) then
-				-- No combat possible, auto-reveal all cards and go to resolution
-				log('No combat possible. Auto-revealing all cards.')
-				combat.autoRevealRemaining(gameState)
-				gameState.phase = 'resolution'
-				resolution.showResolutionPopupImmediately(gameState)
-			else
-				showPhaseTransition('COMBAT PHASE', 2.0)
-			end
-		end
-	end
+	-- Delegate animation updates to animations module
+	animations.update(dt)
 end
 
 function game.draw()
@@ -122,6 +92,8 @@ function game.draw()
 	
 	if gameState.phase == 'menu' then
 		ui.drawMenu(gameState)
+	elseif gameState.phase == 'lobby' then
+		lobby.draw(gameState)
 	elseif gameState.phase == 'deckbuilder' then
 		ui.drawDeckBuilder(gameState, cardBack)
 	elseif gameState.phase == 'setup' then
@@ -161,10 +133,20 @@ function game.startGame()
 	local gameState = getState()
 	
 	-- Initialize players
-	gameState.players = {
-		{name='Player A', hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
-		{name='Player B', hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}}
-	}
+	if gameState.multiplayer then
+		-- In multiplayer, use network player IDs
+		local hostName = gameState.networkPlayerId == 1 and 'Host' or 'Client'
+		local clientName = gameState.networkPlayerId == 1 and 'Client' or 'Host'
+		gameState.players = {
+			{name=hostName, hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
+			{name=clientName, hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}}
+		}
+	else
+		gameState.players = {
+			{name='Player A', hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
+			{name='Player B', hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}}
+		}
+	end
 	
 	-- Create decks from deck builder data
 	for pIndex = 1, 2 do
@@ -192,206 +174,122 @@ function game.startGame()
 	showPhaseTransition('ROUND '..gameState.currentRound, 2.0)
 end
 
--- Event handlers
-function game.mousepressed(x, y, button)
-	local gameState = getState()
-	
-	if button ~= 1 and button ~= 2 then return end
-	
-	-- Check for Next Round button click first
-	if gameState.resolutionPopup.show then
-		local btnX = gameState.resolutionPopup.buttonX
-		local btnY = gameState.resolutionPopup.buttonY
-		local btnW = gameState.resolutionPopup.buttonW
-		local btnH = gameState.resolutionPopup.buttonH
+-- Handle network messages
+function game.handleNetworkMessage(message, gameState)
+	if message.type == network.MESSAGE_TYPES.PLAYER_READY then
+		-- Handle player ready status
+		local lobby = require('src.ui.lobby')
+		lobby.handleNetworkMessage(message, gameState)
+	elseif message.type == network.MESSAGE_TYPES.PLAYER_DECK_SELECTED then
+		deckbuilder.handleOpponentDeck(gameState, message.data.deck)
+	elseif message.type == network.MESSAGE_TYPES.GAME_START then
+		-- Host started the game, transition to deck builder
+		gameState.phase = 'deckbuilder'
+		gameState.multiplayer = true
+		gameState.networkPlayerId = gameState.network.getPlayerId()
+	elseif message.type == network.MESSAGE_TYPES.CARD_PLACED then
+		-- Handle card placement from opponent
+		local playerId = message.data.playerId
+		local slotIndex = message.data.slotIndex
+		local cardData = message.data.card
 		
-		if x >= btnX and x <= btnX + btnW and y >= btnY and y <= btnY + btnH then
-			game.handleResolutionButtonClick()
-			return
-		end
-	end
-	
-	if gameState.phase == 'menu' then
-		if ui.hitMenuButton(x, y) then
-			gameState.phase = 'deckbuilder'
-		end
-	elseif gameState.phase == 'deckbuilder' then
-		ui.handleDeckBuilderClick(gameState, x, y, button)
-	elseif gameState.phase == 'setup' then
-		-- Check for Player A pass button
-		if ui.hitPassButton(gameState, x, y, 1) then
-			gameState.setupPassed[1] = true
-			log('Player A passes.')
-			if gameState.setupPassed[1] and gameState.setupPassed[2] then
-				-- Both players passed, start coin toss
-				setup.startCoinTossAnimation(gameState)
-			end
-			return
-		end
-		
-		-- Check for Player B pass button
-		if ui.hitPassButton(gameState, x, y, 2) then
-			gameState.setupPassed[2] = true
-			log('Player B passes.')
-			if gameState.setupPassed[1] and gameState.setupPassed[2] then
-				-- Both players passed, start coin toss
-				setup.startCoinTossAnimation(gameState)
-			end
-			return
-		end
-		
-		-- Handle card placement for both players
-		for playerIndex = 1, 2 do
-			local p = gameState.players[playerIndex]
-			local handIndex = ui.hitHand(gameState, p, x, y)
-			if handIndex then
-				gameState.selectedHandIndex[playerIndex] = handIndex
-				log(p.name..' selected '..p.hand[handIndex].name..' from hand.')
-				break
-			else
-				local slot = ui.hitFieldSlot(playerIndex, x, y)
-				if slot and p.field[slot]==nil and gameState.selectedHandIndex[playerIndex] then
-					local idx = gameState.selectedHandIndex[playerIndex]
-					p.field[slot] = table.remove(p.hand, idx)
-					gameState.selectedHandIndex[playerIndex] = nil
-					log(p.name..' placed a card face-down at slot '..slot)
+		if gameState.players[playerId] and gameState.players[playerId].field[slotIndex] == nil then
+			gameState.players[playerId].field[slotIndex] = cardData
+			-- Remove card from opponent's hand
+			for i, handCard in ipairs(gameState.players[playerId].hand) do
+				if handCard.name == cardData.name then
+					table.remove(gameState.players[playerId].hand, i)
 					break
 				end
 			end
 		end
-	elseif gameState.phase == 'combat' then
-		local attacker = gameState.players[gameState.turn]
-		if not gameState.pendingAttackSlot then
-			-- Step 1: Choose your face-down card to reveal
-			local aSlot = ui.hitFieldSlot(gameState.turn, x, y)
-			if aSlot and attacker.field[aSlot] and not attacker.revealed[aSlot] then
-				attacker.revealed[aSlot] = true
-				gameState.flipSound:stop(); gameState.flipSound:play()
-				log(attacker.name..' reveals '..attacker.field[aSlot].name)
-				gameState.pendingAttackSlot = aSlot
-				log('Choose an opponent card to reveal and battle.')
-			end
-		else
-			-- Step 2: Choose opponent's face-down card to reveal and fight
-			local defender = gameState.players[3 - gameState.turn]
-			local dSlot = ui.hitFieldSlot(3 - gameState.turn, x, y)
-			if dSlot and defender.field[dSlot] and not defender.revealed[dSlot] then
-				defender.revealed[dSlot] = true
-				gameState.flipSound:stop(); gameState.flipSound:play()
-				log(defender.name..' reveals '..defender.field[dSlot].name)
-				-- resolve combat
-				rules.resolveCombat(attacker, gameState.pendingAttackSlot, defender, dSlot, gameState)
-				gameState.pendingAttackSlot = nil
-				helpers.nextTurn(gameState)
-				-- Check if combat can continue
-				if not combat.canContinue(gameState) then
-					-- No more combat possible, auto-reveal remaining cards
-					log('No more combat possible. Auto-revealing remaining cards.')
-					combat.autoRevealRemaining(gameState)
-					gameState.phase = 'resolution'
-					-- Immediately show resolution popup
-					resolution.showResolutionPopupImmediately(gameState)
-				end
-			end
+	elseif message.type == network.MESSAGE_TYPES.CARD_REVEALED then
+		-- Handle card reveal from opponent
+		local playerId = message.data.playerId
+		local slotIndex = message.data.slotIndex
+		
+		if gameState.players[playerId] and gameState.players[playerId].field[slotIndex] then
+			gameState.players[playerId].revealed[slotIndex] = true
 		end
+	elseif message.type == network.MESSAGE_TYPES.SETUP_PASSED then
+		-- Handle setup phase pass from opponent
+		local playerId = message.data.playerId
+		gameState.setupPassed[playerId] = true
+		
+		-- Check if both players passed
+		if gameState.setupPassed[1] and gameState.setupPassed[2] then
+			-- Start coin toss
+			setup.startCoinTossAnimation(gameState)
+		end
+	elseif message.type == network.MESSAGE_TYPES.TURN_CHANGED then
+		-- Handle turn change from opponent
+		gameState.turn = message.data.turn
+	elseif message.type == network.MESSAGE_TYPES.GAME_STATE_SYNC then
+		-- Handle game state synchronization
+		local syncState = message.data.state
+		-- Update relevant parts of game state
+		gameState.players = syncState.players or gameState.players
+		gameState.turn = syncState.turn or gameState.turn
+		gameState.setupPassed = syncState.setupPassed or gameState.setupPassed
+	elseif message.type == network.MESSAGE_TYPES.COIN_TOSS_RESULT then
+		-- Handle coin toss result from host
+		gameState.coinFirst = message.data.result
+		gameState.turn = gameState.coinFirst
+		gameState.coinTossAnimation.result = message.data.result
+		log('Coin toss result: ' .. (gameState.coinFirst == 1 and 'Host' or 'Client') .. ' goes first')
 	end
 end
 
-function game.handleResolutionButtonClick()
+-- Event handlers (delegated to events module)
+function game.mousepressed(x, y, button)
 	local gameState = getState()
-	if not gameState.resolutionPopup.show then return false end
 	
-	local data = gameState.resolutionPopup.data
-	
-	-- Resolve the round
-	local roundWinner = rules.resolveRound(gameState)
-	
-	-- Check if game is over (Best of 3)
-	if data.isGameOver then
-		local gameWinner = rules.getGameWinner(gameState)
-		log('GAME OVER! '..gameState.players[gameWinner].name..' wins the match!')
-		gameState.gameOver = true
-		gameState.phase = 'menu' -- Return to menu
-	else
-		-- Continue to next round
-		gameState.currentRound = gameState.currentRound + 1
-		for _, p in ipairs(gameState.players) do
-			p.field = {nil,nil,nil}
-			p.revealed = {false,false,false}
-		end
-		for _, p in ipairs(gameState.players) do 
-			for i=1,config.GAME.DRAW_PER_ROUND do 
-				deck.draw(p) 
-			end 
-		end
-		gameState.phase = 'setup'
-		gameState.turn = gameState.coinFirst
-		-- Reset pass status for new round
-		gameState.setupPassed = {false, false}
-		log('New round. Draw 2 each. Setup phase.')
-		showPhaseTransition('ROUND '..gameState.currentRound, 2.0)
+	-- Handle lobby clicks
+	if gameState.phase == 'lobby' then
+		lobby.handleClick(x, y, button, gameState)
+		return
 	end
 	
-	-- Hide popup
-	gameState.resolutionPopup.show = false
-	return true
+	events.mousepressed(x, y, button)
+end
+
+function game.handleResolutionButtonClick()
+	return events.handleResolutionButtonClick()
 end
 
 function game.keypressed(key)
 	local gameState = getState()
 	
-	if key == 'r' then game.load() end
-	if gameState.phase == 'deckbuilder' then
-		if key == 'escape' then
-			gameState.phase = 'menu'
-		elseif key == 'return' then
-			-- Check both deck sizes and start game
-			local p1Cards = 0
-			for _, cardData in ipairs(gameState.playerDecks[1]) do
-				p1Cards = p1Cards + cardData.count
-			end
-			local p2Cards = 0
-			for _, cardData in ipairs(gameState.playerDecks[2]) do
-				p2Cards = p2Cards + cardData.count
-			end
-			log('Deck sizes: Player 1='..p1Cards..', Player 2='..p2Cards)
-			log('Required: MIN='..config.GAME.MIN_DECK_SIZE..', MAX='..config.GAME.MAX_DECK_SIZE)
-			if p1Cards >= config.GAME.MIN_DECK_SIZE and p1Cards <= config.GAME.MAX_DECK_SIZE and 
-			   p2Cards >= config.GAME.MIN_DECK_SIZE and p2Cards <= config.GAME.MAX_DECK_SIZE then
-				log('Starting game...')
-				game.startGame()
-			else
-				log('Deck sizes invalid! Cannot start game.')
-			end
+	-- Handle lobby keyboard input
+	if gameState.phase == 'lobby' then
+		local lobby = require('src.ui.lobby')
+		if lobby.handleKeyInput(key, gameState) then
+			return
 		end
-	elseif gameState.phase == 'setup' and key == 'tab' then
-		-- quick local two-player toggle without passing
-		helpers.nextTurn(gameState)
-		log('Switched to '..gameState.players[gameState.turn].name..' (Tab).')
 	end
+	
+	-- Handle deck builder Enter key in multiplayer
+	if gameState.phase == 'deckbuilder' and gameState.multiplayer and key == 'return' then
+		deckbuilder.confirmDeckSelection(gameState)
+		return
+	end
+	
+	events.keypressed(key)
 end
 
 function game.wheelmoved(x, y)
+	events.wheelmoved(x, y)
+end
+
+function game.textinput(text)
 	local gameState = getState()
-	if gameState.phase == 'deckbuilder' then
-		local scrollStep = 20
-		
-		-- Calculate actual content height
-		local cardsPerRow = 6
-		local cardH = 110
-		local cardSpacing = 8
-		local archetypeSpacing = 20
-		local totalCards = #gameState.allCards
-		local totalRows = math.ceil(totalCards / cardsPerRow)
-		local contentHeight = (totalRows * (cardH + cardSpacing)) + (6 * archetypeSpacing) -- 6 archetypes
-		
-		-- Calculate visible area height
-		local visibleHeight = love.graphics.getHeight() - 180 - 160 -- Total height - top area - bottom area
-		
-		-- Calculate max scroll needed
-		local maxScroll = math.max(0, contentHeight - visibleHeight + 50) -- Extra 50px padding at bottom
-		
-		gameState.deckBuilderScroll = math.max(0, math.min(maxScroll, gameState.deckBuilderScroll - y * scrollStep))
+	
+	-- Handle lobby text input
+	if gameState.phase == 'lobby' then
+		local lobby = require('src.ui.lobby')
+		if lobby.handleTextInput(text, gameState) then
+			return
+		end
 	end
 end
 

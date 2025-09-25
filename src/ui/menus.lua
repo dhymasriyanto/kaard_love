@@ -5,21 +5,55 @@ local menuBtn = { x = 0, y = 0, w = 200, h = 60 }
 
 function menus.drawMenu(state)
 	local w, h = love.graphics.getWidth(), love.graphics.getHeight()
+	
+	-- Title
+	love.graphics.setColor(1,1,1,1)
+	love.graphics.printf('Kaard - Simple TCG', w*0.5 - 200, h*0.3, 400, 'center')
+	
+	-- Single Player button
 	menuBtn.x = (w - menuBtn.w) * 0.5
-	menuBtn.y = (h - menuBtn.h) * 0.5
+	menuBtn.y = (h - menuBtn.h) * 0.5 - 40
 	
 	love.graphics.setColor(0,0,0,0.7)
 	love.graphics.rectangle('fill', menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8, 8)
 	love.graphics.setColor(1,1,1,1)
 	love.graphics.rectangle('line', menuBtn.x, menuBtn.y, menuBtn.w, menuBtn.h, 8, 8)
-	love.graphics.printf('Build Deck', menuBtn.x, menuBtn.y + 20, menuBtn.w, 'center')
+	love.graphics.printf('Single Player', menuBtn.x, menuBtn.y + 20, menuBtn.w, 'center')
 	
+	-- Multiplayer button
+	local multiplayerBtn = {x = menuBtn.x, y = menuBtn.y + menuBtn.h + 20, w = menuBtn.w, h = menuBtn.h}
+	
+	love.graphics.setColor(0,0,0,0.7)
+	love.graphics.rectangle('fill', multiplayerBtn.x, multiplayerBtn.y, multiplayerBtn.w, multiplayerBtn.h, 8, 8)
 	love.graphics.setColor(1,1,1,1)
-	love.graphics.printf('Kaard - Simple TCG', w*0.5 - 200, h*0.3, 400, 'center')
+	love.graphics.rectangle('line', multiplayerBtn.x, multiplayerBtn.y, multiplayerBtn.w, multiplayerBtn.h, 8, 8)
+	love.graphics.printf('Multiplayer', multiplayerBtn.x, multiplayerBtn.y + 20, multiplayerBtn.w, 'center')
+	
+	-- Store button positions for click detection
+	state.menuButtons = {
+		singlePlayer = {x = menuBtn.x, y = menuBtn.y, w = menuBtn.w, h = menuBtn.h},
+		multiplayer = {x = multiplayerBtn.x, y = multiplayerBtn.y, w = multiplayerBtn.w, h = multiplayerBtn.h}
+	}
 end
 
-function menus.hitMenuButton(x, y)
-	return x>=menuBtn.x and x<=menuBtn.x+menuBtn.w and y>=menuBtn.y and y<=menuBtn.y+menuBtn.h
+function menus.hitMenuButton(x, y, state)
+	if not state.menuButtons then
+		return nil
+	end
+	
+	-- Check single player button
+	if x >= state.menuButtons.singlePlayer.x and x <= state.menuButtons.singlePlayer.x + state.menuButtons.singlePlayer.w and
+	   y >= state.menuButtons.singlePlayer.y and y <= state.menuButtons.singlePlayer.y + state.menuButtons.singlePlayer.h then
+		return 'singlePlayer'
+	end
+	
+	-- Check multiplayer button
+	if x >= state.menuButtons.multiplayer.x and x <= state.menuButtons.multiplayer.x + state.menuButtons.multiplayer.w and
+	   y >= state.menuButtons.multiplayer.y and y <= state.menuButtons.multiplayer.y + state.menuButtons.multiplayer.h then
+		return 'multiplayer'
+	end
+	
+	return nil
 end
 
 function menus.drawPassButton(state)

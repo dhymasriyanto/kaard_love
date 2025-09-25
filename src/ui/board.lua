@@ -33,7 +33,15 @@ function board.draw(state, cardBack, drawCard, drawVictoryIndicators)
 			local y = oy
 			local p = state.players[pIndex]
 			if p.field[i] then
-				drawCard(p.field[i], x, y, p.revealed[i], cardBack)
+				-- In multiplayer mode, show opponent's cards even if not revealed
+				local shouldReveal = p.revealed[i]
+				if state.multiplayer and state.networkPlayerId ~= pIndex then
+					-- Show opponent's card but not revealed
+					shouldReveal = false
+				end
+				
+				drawCard(p.field[i], x, y, shouldReveal, cardBack)
+				
 				-- Show current strength on revealed cards (large, clear display)
 				if p.revealed[i] then
 					local card = p.field[i]
@@ -42,6 +50,14 @@ function board.draw(state, cardBack, drawCard, drawVictoryIndicators)
 					love.graphics.rectangle('fill', x + slotW - 40, y + 5, 35, 25)
 					love.graphics.setColor(1,1,1,1)
 					love.graphics.printf(tostring(str), x + slotW - 40, y + 8, 35, 'center')
+				end
+				
+				-- In multiplayer, show a small indicator that opponent has a card
+				if state.multiplayer and state.networkPlayerId ~= pIndex and not p.revealed[i] then
+					love.graphics.setColor(0.8, 0.8, 0.2, 0.8)
+					love.graphics.rectangle('fill', x + slotW - 20, y + 5, 15, 15)
+					love.graphics.setColor(1,1,1,1)
+					love.graphics.printf('?', x + slotW - 20, y + 8, 15, 'center')
 				end
 			else
 				love.graphics.setColor(1,1,1,0.15)

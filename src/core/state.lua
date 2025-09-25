@@ -2,7 +2,7 @@ local state = {}
 
 -- Game state management
 local gameState = {
-	phase = 'loading', -- loading, menu, deckbuilder, setup, combat, resolution
+	phase = 'loading', -- loading, menu, lobby, deckbuilder, setup, combat, resolution
 	players = {},
 	turn = 1,
 	selectedHandIndex = {nil, nil},
@@ -24,7 +24,15 @@ local gameState = {
 	deckBuilderScroll = 0,
 	notification = { text = '', timer = 0 },
 	flipSound = nil,
-	background = nil
+	background = nil,
+	-- Multiplayer state
+	multiplayer = false,
+	networkPlayerId = 1, -- 1 for host, 2 for client
+	opponentDeckReady = false,
+	deckSelectionComplete = {false, false}, -- Track if each player has selected their deck
+	waitingForOpponent = false,
+	opponentCards = {}, -- Store opponent's cards (unrevealed)
+	network = nil -- Will be set to network module
 }
 
 function state.get()
@@ -59,7 +67,15 @@ function state.reset()
 		deckBuilderScroll = 0,
 		notification = { text = '', timer = 0 },
 		flipSound = nil,
-		background = nil
+		background = nil,
+		-- Multiplayer state
+		multiplayer = false,
+		networkPlayerId = 1,
+		opponentDeckReady = false,
+		deckSelectionComplete = {false, false},
+		waitingForOpponent = false,
+		opponentCards = {},
+		network = gameState.network -- Preserve network module reference
 	}
 end
 
