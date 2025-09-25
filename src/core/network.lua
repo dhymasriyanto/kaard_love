@@ -1,472 +1,238 @@
+-- Simple network module for multiplayer
+local socket = require('socket')
+
 local network = {}
 
--- Import luasocket
-local socket = require("socket")
-
--- Network configuration
-local NETWORK_CONFIG = {
-    PORT = 12345,
-    TIMEOUT = 2.0, -- Reduced timeout
-    BUFFER_SIZE = 1024,
-    HEARTBEAT_INTERVAL = 2.0, -- Reduced heartbeat frequency
-    CONNECTION_TIMEOUT = 10.0 -- Connection timeout
-}
-
 -- Network state
-local networkState = {
-    isHost = false,
-    isClient = false,
-    isConnected = false,
+local state = {
     server = nil,
     client = nil,
-    lastHeartbeat = 0,
-    messageQueue = {},
-    connectionTimeout = 0,
-    playerId = 1, -- 1 for host, 2 for client
-    opponentReady = false,
-    lobbyReady = false
+    mode = 'none', -- 'host', 'client', 'none'
+    connected = false,
+    port = 25565,
+    messages = {},
+    onClientConnected = nil, -- Callback when client connects
+    -- Rate limiting
+    lastMessageTime = 0,
+    messageRateLimit = 0.1 -- 100ms between messages
 }
 
--- Message types
-local MESSAGE_TYPES = {
-    PLAYER_READY = "PLAYER_READY",
-    PLAYER_DECK_SELECTED = "PLAYER_DECK_SELECTED",
-    GAME_START = "GAME_START",
-    CARD_PLACED = "CARD_PLACED",
-    CARD_REVEALED = "CARD_REVEALED",
-    SETUP_PASSED = "SETUP_PASSED",
-    TURN_CHANGED = "TURN_CHANGED",
-    GAME_STATE_SYNC = "GAME_STATE_SYNC",
-    COIN_TOSS_RESULT = "COIN_TOSS_RESULT",
-    HEARTBEAT = "HEARTBEAT",
-    DISCONNECT = "DISCONNECT"
-}
-
--- Initialize network module
+-- Initialize network
 function network.init()
-    networkState.isHost = false
-    networkState.isClient = false
-    networkState.isConnected = false
-    networkState.server = nil
-    networkState.client = nil
-    networkState.messageQueue = {}
-    networkState.connectionTimeout = 0
-    networkState.playerId = 1
-    networkState.opponentReady = false
-    networkState.lobbyReady = false
+    state.server = nil
+    state.client = nil
+    state.mode = 'none'
+    state.connected = false
+    state.messages = {}
+    print("Network: Initialized")
 end
 
--- Start hosting a game
+-- Start hosting
 function network.startHost(port)
-    network.init()
-    networkState.isHost = true
-    networkState.playerId = 1
+    port = port or 25565
+    state.port = port
     
-    local targetPort = port or NETWORK_CONFIG.PORT
+    print("Network: Starting host on port", port)
     
-    -- Try to bind to the specified port
-    local success, err = pcall(function()
-        networkState.server = socket.bind("*", targetPort)
-    end)
+    local server, err = socket.bind("*", port)
+    if not server then
+        print("Network: Failed to bind to port", port, "error:", err)
+        return false, "Failed to bind to port " .. port .. ": " .. (err or "unknown error")
+    end
     
-    if success and networkState.server then
-        -- Set non-blocking with small timeout to prevent lag
-        networkState.server:settimeout(0.001) -- Very small timeout
-        networkState.isConnected = true
-        networkState.lobbyReady = true
-        
-        print("Host started on port", targetPort)
-        return true, "Host started on port " .. targetPort
+    server:settimeout(0) -- Non-blocking
+    state.server = server
+    state.mode = 'host'
+    state.connected = false
+    
+    print("Network: Host started successfully on port", port)
+    return true, "Host started on port " .. port
+end
+
+-- Connect to host
+function network.connectToHost(ip, port)
+    ip = ip or "127.0.0.1"
+    port = port or 25565
+    
+    print("Network: Connecting to", ip, "port", port)
+    
+    local client = socket.tcp()
+    if not client then
+        return false, "Failed to create client socket"
+    end
+    
+    client:settimeout(0) -- Non-blocking
+    local success, err = client:connect(ip, port)
+    
+    
+    if success == 1 then
+        -- Immediate success
+        state.client = client
+        state.mode = 'client'
+        state.connected = true
+        print("Network: Connected immediately")
+        return true, "Connected to " .. ip .. ":" .. port
+    elseif err == "timeout" then
+        -- Connection in progress (normal for non-blocking)
+        state.client = client
+        state.mode = 'client'
+        state.connected = false
+        print("Network: Connection in progress...")
+        return true, "Connecting to " .. ip .. ":" .. port
     else
-        print("Port " .. targetPort .. " failed: " .. (err or "Unknown error"))
-        return false, "Failed to bind to port " .. targetPort .. " - " .. (err or "Port already in use")
+        -- Real error
+        print("Network: Connection failed:", err)
+        client:close()
+        return false, "Connection failed: " .. (err or "unknown error")
     end
 end
 
--- Connect to a host
-function network.connectToHost(hostIP, port)
-    network.init()
-    networkState.isClient = true
-    networkState.playerId = 2
-    
-    local targetPort = port or NETWORK_CONFIG.PORT
-    
-    -- Create client socket with better error handling
-    local success, err = pcall(function()
-        networkState.client = socket.connect(hostIP, targetPort)
-    end)
-    
-    if not success or not networkState.client then
-        return false, "Failed to connect to " .. hostIP .. ":" .. targetPort .. " - " .. (err or "Unknown error")
+-- Update network (call in love.update)
+function network.update(dt)
+    if state.mode == 'host' and state.server then
+        -- Accept new connections
+        if not state.connected then
+            local client = state.server:accept()
+            if client then
+                client:settimeout(0)
+                state.client = client
+                state.connected = true
+                print("Network: Client connected!")
+                
+                -- Notify callback that client connected
+                if state.onClientConnected then
+                    state.onClientConnected()
+                end
+            end
+        end
+        
+        -- Receive messages from client
+        if state.connected and state.client then
+            local data, err = state.client:receive()
+            if data then
+                print("Network: Received:", data)
+                table.insert(state.messages, data)
+            elseif err == "closed" then
+                print("Network: Client disconnected")
+                state.client:close()
+                state.client = nil
+                state.connected = false
+            end
+        end
+        
+    elseif state.mode == 'client' and state.client then
+        -- Check if connection completed
+        if not state.connected then
+            local _, err = state.client:send("")
+            if not err then
+                state.connected = true
+                print("Network: Connected to host!")
+            elseif err ~= "timeout" then
+                print("Network: Connection failed:", err)
+                state.client:close()
+                state.client = nil
+                state.mode = 'none'
+            else
+                -- Still connecting, this is normal
+            end
+        end
+        
+        -- Receive messages from host
+        if state.connected then
+            local data, err = state.client:receive()
+            if data then
+                print("Network: Received:", data)
+                table.insert(state.messages, data)
+            elseif err == "closed" then
+                print("Network: Host disconnected")
+                state.client:close()
+                state.client = nil
+                state.connected = false
+                state.mode = 'none'
+            end
+        end
     end
-    
-    -- Set non-blocking with small timeout to prevent lag
-    networkState.client:settimeout(0.001) -- Very small timeout
-    networkState.isConnected = true
-    networkState.connectionTimeout = love.timer.getTime() + NETWORK_CONFIG.CONNECTION_TIMEOUT
-    
-    return true, "Connecting to " .. hostIP .. ":" .. targetPort
 end
 
--- Send a message
-function network.sendMessage(messageType, data)
-    if not networkState.isConnected then
-        print("Cannot send message - not connected")
+-- Send message
+function network.sendMessage(message)
+    if not state.connected then
+        print("Network: Not connected, cannot send message")
         return false
     end
     
-    local message = {
-        type = messageType,
-        data = data or {},
-        timestamp = love.timer.getTime(),
-        playerId = networkState.playerId
-    }
+    -- Rate limiting
+    local currentTime = love.timer.getTime()
+    if currentTime - state.lastMessageTime < state.messageRateLimit then
+        print("Network: Message rate limited, skipping")
+        return false
+    end
+    state.lastMessageTime = currentTime
     
-    local serialized = network.serializeMessage(message)
-    print("Sending message:", serialized)
+    local target = (state.mode == 'host') and state.client or state.client
+    if not target then
+        print("Network: No target to send message to")
+        return false
+    end
     
-    if networkState.isHost and networkState.client then
-        -- Host sending to client
-        local success, err = networkState.client:send(serialized .. "\n")
-        if not success then
-            print("Host send error:", err)
-            return false
-        else
-            print("Host message sent successfully")
-        end
-    elseif networkState.isClient and networkState.client then
-        -- Client sending to host
-        local success, err = networkState.client:send(serialized .. "\n")
-        if not success then
-            print("Client send error:", err)
-            return false
-        else
-            print("Client message sent successfully")
-        end
-    else
-        print("No client connection available for sending")
+    local success, err = target:send(message .. "\n")
+    if not success then
+        print("Network: Send failed:", err)
         return false
     end
     
     return true
 end
 
--- Receive messages
-function network.receiveMessages()
-    if not networkState.isConnected then
-        return {}
-    end
-    
-    local messages = {}
-    
-    if networkState.isHost and networkState.server then
-        -- Host receiving from client
-        local client = networkState.server:accept()
-        if client then
-            client:settimeout(0.001) -- Very small timeout
-            networkState.client = client
-        end
-        
-        if networkState.client then
-            -- Try to receive with small timeout
-            local line, err = networkState.client:receive("*l")
-            if line then
-                print("Host received:", line)
-                local message = network.deserializeMessage(line)
-                if message then
-                    table.insert(messages, message)
-                    print("Host parsed message:", message.type)
-                end
-            elseif err and err ~= "timeout" and err ~= "wantread" then
-                print("Host receive error:", err)
-                networkState.isConnected = false
-            end
-        end
-    elseif networkState.isClient and networkState.client then
-        -- Client receiving from host
-        local line, err = networkState.client:receive("*l")
-        if line then
-            print("Client received:", line)
-            local message = network.deserializeMessage(line)
-            if message then
-                table.insert(messages, message)
-                print("Client parsed message:", message.type)
-            end
-        elseif err and err ~= "timeout" and err ~= "wantread" then
-            print("Client receive error:", err)
-            networkState.isConnected = false
-        end
-    end
-    
-    return messages
+-- Get received messages
+function network.getMessages()
+    local msgs = state.messages
+    state.messages = {}
+    return msgs
 end
 
--- Update network (call this in game update loop)
-function network.update(dt)
-    if not networkState.isConnected then
-        return
-    end
-    
-    -- Handle connection timeout for client
-    if networkState.isClient and networkState.connectionTimeout > 0 then
-        if love.timer.getTime() > networkState.connectionTimeout then
-            networkState.isConnected = false
-            networkState.connectionTimeout = 0
-            print("Connection timeout")
-            return
-        end
-    end
-    
-    -- Send heartbeat less frequently to reduce lag
-    local currentTime = love.timer.getTime()
-    if currentTime - networkState.lastHeartbeat > NETWORK_CONFIG.HEARTBEAT_INTERVAL then
-        -- Only send heartbeat if we haven't sent any messages recently
-        local success = network.sendMessage(MESSAGE_TYPES.HEARTBEAT, {})
-        if success then
-            networkState.lastHeartbeat = currentTime
-        end
-    end
-    
-    -- Process incoming messages with rate limiting
-    local messages = network.receiveMessages()
-    local processedCount = 0
-    for _, message in ipairs(messages) do
-        if processedCount < 5 then -- Limit messages per frame
-            network.processMessage(message)
-            processedCount = processedCount + 1
-        else
-            -- Queue remaining messages for next frame
-            table.insert(networkState.messageQueue, message)
-        end
-    end
-end
-
--- Process received message
-function network.processMessage(message)
-    if message.type == MESSAGE_TYPES.HEARTBEAT then
-        -- Heartbeat received, connection is alive
-        return
-    elseif message.type == MESSAGE_TYPES.PLAYER_READY then
-        networkState.opponentReady = message.data.ready or false
-    elseif message.type == MESSAGE_TYPES.PLAYER_DECK_SELECTED then
-        -- Handle deck selection from opponent
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.GAME_START then
-        -- Handle game start
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.CARD_PLACED then
-        -- Handle card placement
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.CARD_REVEALED then
-        -- Handle card reveal
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.SETUP_PASSED then
-        -- Handle setup phase pass
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.TURN_CHANGED then
-        -- Handle turn change
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.GAME_STATE_SYNC then
-        -- Handle game state synchronization
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.COIN_TOSS_RESULT then
-        -- Handle coin toss result
-        networkState.messageQueue[#networkState.messageQueue + 1] = message
-    elseif message.type == MESSAGE_TYPES.DISCONNECT then
-        networkState.isConnected = false
-    end
-end
-
--- Get queued messages
-function network.getQueuedMessages()
-    local messages = networkState.messageQueue
-    networkState.messageQueue = {}
-    return messages
-end
-
--- Serialize message to string (simple format)
-function network.serializeMessage(message)
-    -- Convert table to simple string format
-    local parts = {}
-    table.insert(parts, "type:" .. (message.type or ""))
-    table.insert(parts, "playerId:" .. (message.playerId or 1))
-    table.insert(parts, "timestamp:" .. (message.timestamp or 0))
-    
-    if message.data then
-        for key, value in pairs(message.data) do
-            if type(value) == "table" then
-                -- For complex data like deck, convert to simple format
-                if key == "deck" then
-                    local deckStr = "deck:"
-                    for i, cardData in ipairs(value) do
-                        if i > 1 then deckStr = deckStr .. "," end
-                        deckStr = deckStr .. cardData.card.name .. "x" .. cardData.count
-                    end
-                    table.insert(parts, deckStr)
-                else
-                    table.insert(parts, key .. ":" .. tostring(value))
-                end
-            else
-                table.insert(parts, key .. ":" .. tostring(value))
-            end
-        end
-    end
-    
-    return table.concat(parts, "|")
-end
-
--- Deserialize message from string
-function network.deserializeMessage(data)
-    local message = {}
-    local parts = {}
-    
-    -- Split by |
-    for part in data:gmatch("[^|]+") do
-        table.insert(parts, part)
-    end
-    
-    -- Parse each part
-    for _, part in ipairs(parts) do
-        local key, value = part:match("([^:]+):(.+)")
-        if key and value then
-            if key == "type" then
-                message.type = value
-            elseif key == "playerId" then
-                message.playerId = tonumber(value)
-            elseif key == "timestamp" then
-                message.timestamp = tonumber(value)
-            elseif key == "deck" then
-                -- Parse deck data
-                message.data = message.data or {}
-                message.data.deck = {}
-                for cardStr in value:gmatch("[^,]+") do
-                    local cardName, count = cardStr:match("([^x]+)x(%d+)")
-                    if cardName and count then
-                        table.insert(message.data.deck, {
-                            card = {name = cardName},
-                            count = tonumber(count)
-                        })
-                    end
-                end
-            else
-                message.data = message.data or {}
-                -- Try to convert to number if possible
-                local numValue = tonumber(value)
-                message.data[key] = numValue or value
-            end
-        end
-    end
-    
-    return message
-end
-
--- Check if we're connected
-function network.isConnected()
-    return networkState.isConnected
-end
-
--- Check if we're host
+-- Status functions
 function network.isHost()
-    return networkState.isHost
+    return state.mode == 'host'
 end
 
--- Check if we're client
 function network.isClient()
-    return networkState.isClient
+    return state.mode == 'client'
 end
 
--- Get player ID
-function network.getPlayerId()
-    return networkState.playerId
+function network.isConnected()
+    return state.connected
 end
 
--- Check if opponent is ready
-function network.isOpponentReady()
-    return networkState.opponentReady
-end
-
--- Check if lobby is ready
-function network.isLobbyReady()
-    return networkState.lobbyReady
-end
-
--- Get current port (for host)
 function network.getCurrentPort()
-    if networkState.server then
-        return networkState.server:getsockname()
-    end
-    return NETWORK_CONFIG.PORT
+    return state.port
+end
+
+function network.getMode()
+    return state.mode
+end
+
+-- Set callback for when client connects (host only)
+function network.setOnClientConnected(callback)
+    state.onClientConnected = callback
 end
 
 -- Disconnect
 function network.disconnect()
-    if networkState.server then
-        networkState.server:close()
-        networkState.server = nil
+    if state.server then
+        state.server:close()
+        state.server = nil
     end
-    if networkState.client then
-        networkState.client:close()
-        networkState.client = nil
+    if state.client then
+        state.client:close()
+        state.client = nil
     end
-    networkState.isConnected = false
-    networkState.isHost = false
-    networkState.isClient = false
+    
+    state.mode = 'none'
+    state.connected = false
+    state.messages = {}
+    state.onClientConnected = nil
+    print("Network: Disconnected")
 end
-
--- Send player ready status
-function network.sendPlayerReady(ready)
-    print("Sending PLAYER_READY:", ready, "from player", networkState.playerId)
-    return network.sendMessage(MESSAGE_TYPES.PLAYER_READY, {ready = ready})
-end
-
--- Send deck selection
-function network.sendDeckSelected(deckData)
-    return network.sendMessage(MESSAGE_TYPES.PLAYER_DECK_SELECTED, {deck = deckData})
-end
-
--- Send game start
-function network.sendGameStart()
-    return network.sendMessage(MESSAGE_TYPES.GAME_START, {})
-end
-
--- Send card placement
-function network.sendCardPlaced(playerId, slotIndex, cardData)
-    return network.sendMessage(MESSAGE_TYPES.CARD_PLACED, {
-        playerId = playerId,
-        slotIndex = slotIndex,
-        card = cardData
-    })
-end
-
--- Send card reveal
-function network.sendCardRevealed(playerId, slotIndex)
-    return network.sendMessage(MESSAGE_TYPES.CARD_REVEALED, {
-        playerId = playerId,
-        slotIndex = slotIndex
-    })
-end
-
--- Send setup passed
-function network.sendSetupPassed(playerId)
-    return network.sendMessage(MESSAGE_TYPES.SETUP_PASSED, {playerId = playerId})
-end
-
--- Send turn change
-function network.sendTurnChanged(newTurn)
-    return network.sendMessage(MESSAGE_TYPES.TURN_CHANGED, {turn = newTurn})
-end
-
--- Send game state sync
-function network.sendGameStateSync(gameState)
-    return network.sendMessage(MESSAGE_TYPES.GAME_STATE_SYNC, {state = gameState})
-end
-
--- Send coin toss result
-function network.sendCoinTossResult(result)
-    return network.sendMessage(MESSAGE_TYPES.COIN_TOSS_RESULT, {result = result})
-end
-
--- Export message types for other modules
-network.MESSAGE_TYPES = MESSAGE_TYPES
 
 return network

@@ -13,7 +13,6 @@ local deck = require('src.game.deck')
 local state = require('src.core.state')
 local events = require('src.core.events')
 local animations = require('src.core.animations')
-local network = require('src.core.network')
 
 -- UI modules
 local lobby = require('src.ui.lobby')
@@ -51,10 +50,6 @@ function game.load()
 	gameState.flipSound = loader.loadSound('assets/sounds/flip.wav')
 	gameState.background = loader.loadBackground()
 	
-	-- Initialize network module
-	network.init()
-	gameState.network = network
-	
 	-- Initialize lobby
 	lobby.init()
 	
@@ -65,15 +60,9 @@ end
 function game.update(dt)
 	local gameState = getState()
 	
-	-- Update network if in multiplayer mode
-	if gameState.multiplayer and gameState.network then
-		gameState.network.update(dt)
-		
-		-- Process network messages
-		local messages = gameState.network.getQueuedMessages()
-		for _, message in ipairs(messages) do
-			game.handleNetworkMessage(message, gameState)
-		end
+	-- Update lobby
+	if gameState.phase == 'lobby' then
+		lobby.update(dt)
 	end
 	
 	-- Delegate animation updates to animations module
@@ -133,14 +122,16 @@ function game.startGame()
 	local gameState = getState()
 	
 	-- Initialize players
-	if gameState.multiplayer then
-		-- In multiplayer, use network player IDs
-		local hostName = gameState.networkPlayerId == 1 and 'Host' or 'Client'
-		local clientName = gameState.networkPlayerId == 1 and 'Client' or 'Host'
+	if gameState.multiplayer and gameState.multiplayer.isMultiplayer() then
+		-- In multiplayer, use multiplayer player IDs
+		local myPlayerId = gameState.multiplayer.getMyPlayerId()
+		local hostName = myPlayerId == 1 and 'Host' or 'Client'
+		local clientName = myPlayerId == 1 and 'Client' or 'Host'
 		gameState.players = {
 			{name=hostName, hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
 			{name=clientName, hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}}
 		}
+		gameState.networkPlayerId = myPlayerId
 	else
 		gameState.players = {
 			{name='Player A', hand={}, field={nil,nil,nil}, revealed={false,false,false}, deck={}, grave={}},
@@ -174,7 +165,7 @@ function game.startGame()
 	showPhaseTransition('ROUND '..gameState.currentRound, 2.0)
 end
 
--- Handle network messages
+-- Handle network messages (delegated to multiplayer module)
 function game.handleNetworkMessage(message, gameState)
 	if message.type == network.MESSAGE_TYPES.PLAYER_READY then
 		-- Handle player ready status
@@ -263,7 +254,7 @@ function game.keypressed(key)
 	-- Handle lobby keyboard input
 	if gameState.phase == 'lobby' then
 		local lobby = require('src.ui.lobby')
-		if lobby.handleKeyInput(key, gameState) then
+		if lobby.handleKeyInput(key) then
 			return
 		end
 	end
@@ -287,7 +278,7 @@ function game.textinput(text)
 	-- Handle lobby text input
 	if gameState.phase == 'lobby' then
 		local lobby = require('src.ui.lobby')
-		if lobby.handleTextInput(text, gameState) then
+		if lobby.handleTextInput(text) then
 			return
 		end
 	end
