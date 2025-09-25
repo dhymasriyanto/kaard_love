@@ -172,7 +172,7 @@ function menus.drawResolutionPopup(state)
 	local data = state.resolutionPopup.data
 	
 	-- Large popup background
-	local popupW, popupH = 600, 400
+	local popupW, popupH = 600, 500
 	local x = (w - popupW) * 0.5
 	local y = (h - popupH) * 0.5
 	
@@ -191,14 +191,14 @@ function menus.drawResolutionPopup(state)
 	love.graphics.printf('Player A:', x + 30, y + 60, popupW - 60, 'left')
 	love.graphics.setColor(1, 1, 1, 1)
 	love.graphics.printf('Cards: '..(data.player1Cards or 'None'), x + 30, y + 80, popupW - 60, 'left')
-	love.graphics.printf('Total Strength: '..data.player1Strength, x + 30, y + 100, popupW - 60, 'left')
+	love.graphics.printf('Total Strength: '..data.player1Strength, x + 30, y + 120, popupW - 60, 'left')
 	
 	-- Player 2 info
 	love.graphics.setColor(0.2, 0.8, 0.2, 1)
-	love.graphics.printf('Player B:', x + 30, y + 140, popupW - 60, 'left')
+	love.graphics.printf('Player B:', x + 30, y + 160, popupW - 60, 'left')
 	love.graphics.setColor(1, 1, 1, 1)
-	love.graphics.printf('Cards: '..(data.player2Cards or 'None'), x + 30, y + 160, popupW - 60, 'left')
-	love.graphics.printf('Total Strength: '..data.player2Strength, x + 30, y + 180, popupW - 60, 'left')
+	love.graphics.printf('Cards: '..(data.player2Cards or 'None'), x + 30, y + 180, popupW - 60, 'left')
+	love.graphics.printf('Total Strength: '..data.player2Strength, x + 30, y + 220, popupW - 60, 'left')
 	
 	-- Winner announcement
 	local winnerText = ''
@@ -213,16 +213,16 @@ function menus.drawResolutionPopup(state)
 		love.graphics.setColor(0.8, 0.8, 0.2, 1)
 	end
 	
-	love.graphics.printf(winnerText, x + 20, y + 220, popupW - 40, 'center')
+	love.graphics.printf(winnerText, x + 20, y + 260, popupW - 40, 'center')
 	
 	-- Score
 	love.graphics.setColor(1, 1, 1, 1)
-	love.graphics.printf('Match Score: '..data.roundWins[1]..' - '..data.roundWins[2], x + 20, y + 260, popupW - 40, 'center')
+	love.graphics.printf('Match Score: '..data.roundWins[1]..' - '..data.roundWins[2], x + 20, y + 300, popupW - 40, 'center')
 	
 	-- Button (Next Round or Exit)
 	local btnW, btnH = 200, 40
 	local btnX = x + (popupW - btnW) * 0.5
-	local btnY = y + 320
+	local btnY = y + 360
 	
 	local buttonText = 'NEXT ROUND'
 	local buttonColor = {0.2, 0.8, 0.2, 0.8} -- Green
@@ -235,7 +235,7 @@ function menus.drawResolutionPopup(state)
 		-- Show winner announcement above button
 		local winnerName = data.winner == 1 and 'Player A' or 'Player B'
 		love.graphics.setColor(1, 1, 0, 1) -- Yellow
-		love.graphics.printf(winnerName..' IS THE WINNER!', x + 20, y + 280, popupW - 40, 'center')
+		love.graphics.printf(winnerName..' IS THE WINNER!', x + 20, y + 340, popupW - 40, 'center')
 	end
 	
 	love.graphics.setColor(buttonColor)
