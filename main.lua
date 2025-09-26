@@ -4,7 +4,7 @@
 local game = require('src.core.game')
 
 function love.load()
-	love.window.setTitle('Kaard - Simple TCG')
+	love.window.setTitle('Kaard - A Very Simple TCG')
 	game.load()
 end
 

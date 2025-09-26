@@ -1,5 +1,5 @@
 function love.conf(t)
-	t.window.title = 'Kaard - Simple TCG'
+	t.window.title = 'Kaard - A Very Simple TCG'
 	t.window.width = 1280
 	t.window.height = 720
 	t.identity = 'kaard_love'
