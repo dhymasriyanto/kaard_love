@@ -251,12 +251,8 @@ function events.keypressed(key)
 		if key == 'escape' then
 			gameState.phase = 'menu'
 		elseif key == 'return' then
-			-- Handle multiplayer vs single player differently
-			if gameState.multiplayer then
-				-- Multiplayer: use deckbuilder.confirmDeckSelection
-				local deckbuilder = require('src.ui.deckbuilder')
-				deckbuilder.confirmDeckSelection(gameState)
-			else
+			-- Handle single player only - multiplayer uses Ready button
+			if not gameState.multiplayer then
 				-- Single player: check both deck sizes and start game
 				local p1Cards = 0
 				for _, cardData in ipairs(gameState.playerDecks[1]) do

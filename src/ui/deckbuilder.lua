@@ -367,7 +367,7 @@ function deckbuilder.draw(state, cardBack)
 		elseif currentCards > 25 then 
 			validationMsg = 'You have too many cards ('..currentCards..'/25)'
 		else 
-			validationMsg = 'Your deck is ready! Press Enter to confirm.'
+			validationMsg = 'Your deck is ready! Click Ready when finished.'
 		end
 		
 		love.graphics.setColor(validationMsg:find('ready') and 0.2 or 0.8, validationMsg:find('ready') and 0.8 or 0.2, 0.2, 1)
@@ -391,31 +391,17 @@ function deckbuilder.draw(state, cardBack)
 		love.graphics.setColor(1, 1, 1, 1)
 		love.graphics.printf('MULTIPLAYER STATUS', statusBoxX + 10, statusBoxY + 10, statusBoxW - 20, 'center')
 		
-		-- Host deck selection status
-		local hostDeckStatus = 'Host Deck: ' .. (state.deckSelectionComplete[1] and 'SELECTED' or 'SELECTING')
-		local hostDeckColor = state.deckSelectionComplete[1] and {0.2, 0.8, 0.2, 1} or {0.8, 0.8, 0.2, 1}
-		love.graphics.setColor(hostDeckColor)
-		love.graphics.printf(hostDeckStatus, statusBoxX + 10, statusBoxY + 35, statusBoxW - 20, 'center')
+		-- Host ready status
+		local hostStatus = 'Host: ' .. (state.deckConfirmed[1] and 'READY' or 'NOT READY')
+		local hostColor = state.deckConfirmed[1] and {0.2, 0.8, 0.2, 1} or {0.8, 0.2, 0.2, 1}
+		love.graphics.setColor(hostColor)
+		love.graphics.printf(hostStatus, statusBoxX + 10, statusBoxY + 35, statusBoxW - 20, 'center')
 		
-		-- Client deck selection status
-		local clientDeckStatus = 'Client Deck: ' .. (state.deckSelectionComplete[2] and 'SELECTED' or 'SELECTING')
-		local clientDeckColor = state.deckSelectionComplete[2] and {0.2, 0.8, 0.2, 1} or {0.8, 0.8, 0.2, 1}
-		love.graphics.setColor(clientDeckColor)
-		love.graphics.printf(clientDeckStatus, statusBoxX + 10, statusBoxY + 60, statusBoxW - 20, 'center')
-		
-		-- Host ready status (only show if both decks selected)
-		if state.deckSelectionComplete[1] and state.deckSelectionComplete[2] then
-			local hostStatus = 'Host: ' .. (state.deckConfirmed[1] and 'READY' or 'NOT READY')
-			local hostColor = state.deckConfirmed[1] and {0.2, 0.8, 0.2, 1} or {0.8, 0.2, 0.2, 1}
-			love.graphics.setColor(hostColor)
-			love.graphics.printf(hostStatus, statusBoxX + 10, statusBoxY + 90, statusBoxW - 20, 'center')
-			
-			-- Client ready status
-			local clientStatus = 'Client: ' .. (state.deckConfirmed[2] and 'READY' or 'NOT READY')
-			local clientColor = state.deckConfirmed[2] and {0.2, 0.8, 0.2, 1} or {0.8, 0.2, 0.2, 1}
-			love.graphics.setColor(clientColor)
-			love.graphics.printf(clientStatus, statusBoxX + 10, statusBoxY + 115, statusBoxW - 20, 'center')
-		end
+		-- Client ready status
+		local clientStatus = 'Client: ' .. (state.deckConfirmed[2] and 'READY' or 'NOT READY')
+		local clientColor = state.deckConfirmed[2] and {0.2, 0.8, 0.2, 1} or {0.8, 0.2, 0.2, 1}
+		love.graphics.setColor(clientColor)
+		love.graphics.printf(clientStatus, statusBoxX + 10, statusBoxY + 60, statusBoxW - 20, 'center')
 		
 		-- Ready button (like in lobby) - positioned at right center above status box
 		local readyBtnX = statusBoxX + 40
@@ -859,14 +845,6 @@ function deckbuilder.toggleReady(state)
 		return
 	end
 	
-	-- Check if both players have selected their decks first
-	if not (state.deckSelectionComplete[1] and state.deckSelectionComplete[2]) then
-		state.notification.text = 'Both players must select their decks first!'
-		state.notification.timer = 2.0
-		print('Cannot ready - not both decks selected')
-		return
-	end
-	
 	local currentPlayerId = state.networkPlayerId
 	state.deckConfirmed[currentPlayerId] = not state.deckConfirmed[currentPlayerId]
 	
@@ -880,7 +858,7 @@ function deckbuilder.toggleReady(state)
 	-- Check if both players are ready
 	if state.deckConfirmed[1] and state.deckConfirmed[2] then
 		print('BOTH PLAYERS READY! Game can start.')
-		state.notification.text = 'Both players ready! Click Start Game.'
+		state.notification.text = 'Both players ready! Host can start setup phase.'
 		state.notification.timer = 2.0
 	else
 		print('Waiting for opponent to be ready...')
